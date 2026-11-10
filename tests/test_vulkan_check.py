@@ -1,7 +1,9 @@
 """scripts/vulkan_check.py: the start check asks for exactly what the game's renderer refuses to start
 without, on the card the renderer would pick."""
 from paths import ROOT
+import ast
 import json
+import os
 import re
 import subprocess
 import sys
@@ -11,13 +13,13 @@ from unittest import mock
 import vulkan_check as V
 
 RENDERER = ROOT / 'gpu' / 'shadps4' / 'video_core' / 'renderer_vulkan'
-V12, V13, V14 = (1 << 22) | (2 << 12), V.API, (1 << 22) | (4 << 12)
+V11, V12, V13, V14 = (1 << 22) | (1 << 12), V.API, V.VULKAN_13, (1 << 22) | (4 << 12)
 
 
 def card(name='Card', api=V13, kind=V.DISCRETE, memory=8 << 30, extensions=V.REQUIRED_EXTENSIONS, features=None,
          vendor=None, device_id=None):
     return {'name': name, 'api': api, 'type': kind, 'memory': memory, 'extensions': set(extensions),
-            'features': dict.fromkeys(V.REQUIRED_FEATURES, True) if features is None else features,
+            'features': dict.fromkeys((*V.REQUIRED_FEATURES, *V.VULKAN_12_FEATURES), True) if features is None else features,
             'vendor': vendor, 'device_id': device_id}
 
 
@@ -42,9 +44,15 @@ class RendererListTests(unittest.TestCase):
         self.assertEqual([plain(m) for m in macros], [plain(n) for n in V.REQUIRED_EXTENSIONS])
         features = re.findall(r'ASSERT_MSG\(robustness2_features\.(\w+),', instance)
         self.assertEqual(tuple(features), V.REQUIRED_FEATURES)
-        # Nothing else the renderer calls required that the check does not know about.
+        compatibility_macros = re.findall(
+            r'ASSERT_MSG\(is_vulkan_13 \|\| add_extension\((VK_\w+)_EXTENSION_NAME\)', instance)
+        self.assertEqual([plain(m) for m in compatibility_macros],
+                         [plain(n.upper()) for n in V.VULKAN_12_EXTENSIONS])
+        self.assertTrue(all(f'Required Vulkan feature unavailable: {name}' in instance
+                            for name in V.VULKAN_12_FEATURES))
         self.assertEqual(len(re.findall(r'"Required Vulkan (?:extension|feature) unavailable', instance)),
-                         len(V.REQUIRED_EXTENSIONS) + len(V.REQUIRED_FEATURES))
+                         len(V.REQUIRED_EXTENSIONS) + len(V.VULKAN_12_EXTENSIONS) +
+                         len(V.REQUIRED_FEATURES) + len(V.VULKAN_12_FEATURES))
 
     def test_the_same_choice_of_card_as_the_renderer(self):
         instance = (RENDERER / 'vk_instance.cpp').read_text(encoding='utf-8')
@@ -59,23 +67,44 @@ class VerdictTests(unittest.TestCase):
         self.assertTrue(result['ok'])
         self.assertEqual(result['device']['missing'], [])
 
+    def test_push_descriptor_is_optional(self):
+        extensions = set(V.REQUIRED_EXTENSIONS) - {'VK_KHR_push_descriptor'}
+        result = V.evaluate(V12, [card(api=V12, extensions=(*extensions, *V.VULKAN_12_EXTENSIONS))])
+        self.assertTrue(result['ok'])
+        self.assertNotIn('VK_KHR_push_descriptor', result['device']['missing'])
+
     def test_no_driver_or_an_old_loader(self):
         self.assertEqual(V.evaluate(None, [])['problem'], 'loader')
-        self.assertEqual(V.evaluate(V12, [])['problem'], 'loader_version')
+        self.assertEqual(V.evaluate(V11, [])['problem'], 'loader_version')
+        self.assertEqual(V.evaluate(V12, [])['problem'], 'devices')
         self.assertEqual(V.evaluate(V13, [])['problem'], 'devices')
+
+    def test_vulkan_12_with_the_compatibility_extensions(self):
+        extensions = (*V.REQUIRED_EXTENSIONS, *V.VULKAN_12_EXTENSIONS)
+        result = V.evaluate(V12, [card(api=V12, extensions=extensions)])
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['device']['missing'], [])
+
+    def test_missing_vulkan_12_compatibility_feature_is_named(self):
+        extensions = (*V.REQUIRED_EXTENSIONS, *V.VULKAN_12_EXTENSIONS)
+        features = dict.fromkeys((*V.REQUIRED_FEATURES, *V.VULKAN_12_FEATURES), True)
+        features['synchronization2'] = False
+        result = V.evaluate(V12, [card(api=V12, extensions=extensions, features=features)])
+        self.assertEqual(result['device']['missing'], ['synchronization2'])
 
     def test_what_a_card_lacks_is_named(self):
         old = card('Old card', api=V12, extensions=['VK_KHR_swapchain'])
         result = V.evaluate(V13, [old])
         self.assertEqual(result['problem'], 'device')
-        self.assertEqual(result['device']['missing'], ['Vulkan 1.3 (1.2.0)', 'VK_KHR_push_descriptor',
-                                                       'VK_EXT_vertex_attribute_divisor', 'VK_EXT_robustness2'])
-        partial = card(features={'robustBufferAccess2': True, 'robustImageAccess2': True, 'nullDescriptor': False})
+        self.assertEqual(result['device']['missing'], ['VK_EXT_vertex_attribute_divisor',
+                                                       'VK_EXT_robustness2', *V.VULKAN_12_EXTENSIONS])
+        partial = card(features={'robustBufferAccess2': True, 'robustImageAccess2': True, 'nullDescriptor': False,
+                                 **dict.fromkeys(V.VULKAN_12_FEATURES, True)})
         self.assertEqual(V.evaluate(V13, [partial])['device']['missing'], ['nullDescriptor'])
 
     def test_the_card_the_game_picks(self):
         laptop = [card('Intel UHD', kind=1, memory=1 << 30), card('GeForce', memory=6 << 30),
-                  card('Old GeForce', api=V12, memory=12 << 30)]
+                  card('Old GeForce', api=V11, memory=12 << 30)]
         self.assertEqual(V.evaluate(V13, laptop)['device']['name'], 'GeForce')
         software = [card('llvmpipe', kind=V.CPU, memory=64 << 30), card('Radeon', kind=1, memory=2 << 30)]
         self.assertEqual(V.evaluate(V13, software)['device']['name'], 'Radeon')
@@ -122,13 +151,13 @@ class UnseenCardTests(unittest.TestCase):
         self.assertEqual(V.evaluate(V13, [apu], adapters=virtual)['unseen'], [])
 
     def test_a_card_its_driver_holds_back(self):
-        # R29: a GTX 1060 with Vulkan 1.2 from an old driver; the game picks the Vega, which has 1.3.
-        gtx = card('NVIDIA GeForce GTX 1060 6GB', api=V12, vendor=0x10DE, device_id=0x1C03, memory=6 << 30)
+        # A GTX 1060 whose driver only exposes Vulkan 1.1; the game picks the Vega, which has Vulkan 1.2.
+        gtx = card('NVIDIA GeForce GTX 1060 6GB', api=V11, vendor=0x10DE, device_id=0x1C03, memory=6 << 30)
         vega = card('AMD Radeon(TM) Vega 8 Graphics', kind=1, vendor=0x1002, device_id=0x15DD, memory=2 << 30)
         result = V.evaluate(V13, [gtx, vega])
         self.assertEqual(result['device']['name'], 'AMD Radeon(TM) Vega 8 Graphics')
         self.assertEqual(result['held_back'], [{'name': 'NVIDIA GeForce GTX 1060 6GB',
-                                                'missing': ['Vulkan 1.3 (1.2.0)']}])
+                                                'missing': ['Vulkan 1.2 (1.1.0)', *V.VULKAN_12_EXTENSIONS]}])
         self.assertEqual(result['unseen'], [])  # Vulkan sees it
         # The game on a discrete card: nothing held back to say.
         self.assertNotIn('held_back', V.evaluate(V13, [card('GeForce RTX 3060'), vega]))
@@ -165,11 +194,18 @@ class LauncherTests(unittest.TestCase):
     """How the launcher reads the answer (bbport_launcher_win.vulkan_verdict)."""
 
     def answer(self, stdout, code):
-        sys.path.insert(0, str(ROOT / 'launcher'))
-        import bbport_launcher_win as L
+        # Load only this function from the launcher: importing the whole UI also imports Pillow,
+        # Tkinter themes and the launcher's other runtime dependencies, none of which this test uses.
+        source = (ROOT / 'launcher' / 'bbport_launcher_win.py').read_text(encoding='utf-8')
+        tree = ast.parse(source)
+        function = next(node for node in tree.body
+                        if isinstance(node, ast.FunctionDef) and node.name == 'vulkan_verdict')
+        namespace = {'json': json, 'subprocess': subprocess, 'sys': sys, 'Path': __import__('pathlib').Path,
+                     'FROZEN': False, 'PORT_DIR': ROOT, 'NO_WINDOW': 0}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), 'bbport_launcher_win.py', 'exec'), namespace)
         done = subprocess.CompletedProcess([], code, stdout, '')
-        with mock.patch.object(L.subprocess, 'run', return_value=done):
-            return L.vulkan_verdict({})
+        with mock.patch.object(subprocess, 'run', return_value=done):
+            return namespace['vulkan_verdict']({})
 
     def test_its_json_line(self):
         self.assertEqual(self.answer('loader noise\n{"ok": true, "problem": null}\n', 0), {'ok': True, 'problem': None})
@@ -191,6 +227,8 @@ class ThisPcTests(unittest.TestCase):
         self.assertIsInstance(verdict['unseen'], list)
 
     @unittest.skipUnless(sys.platform == 'win32', "Windows' own list of cards")
+    @unittest.skipIf(os.environ.get('GITHUB_ACTIONS') == 'true',
+                     "GitHub-hosted runners expose a software adapter, not a player's graphics card")
     def test_windows_lists_its_cards(self):
         adapters = V.windows_adapters()
         self.assertNotIn('Microsoft Basic Render Driver', [a['name'] for a in adapters])  # its software renderer

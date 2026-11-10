@@ -47,6 +47,8 @@ struct RenderAttachment {
             bool stencil_clear;
         };
     };
+    u32 format;
+    u32 samples;
 };
 static_assert(std::has_unique_object_representations_v<RenderAttachment>);
 
@@ -666,6 +668,39 @@ private:
 };
 
 class Scheduler {
+    struct LegacyRenderPassKey {
+        std::array<u32, 8> color_formats{};
+        std::array<u32, 8> color_samples{};
+        std::array<u32, 8> color_layouts{};
+        u16 num_color_attachments{};
+        u32 depth_format{};
+        u32 depth_samples{};
+        u32 depth_layout{};
+        u32 depth_aspects{};
+
+        bool operator==(const LegacyRenderPassKey& other) const noexcept {
+            return color_formats == other.color_formats &&
+                   color_samples == other.color_samples &&
+                   color_layouts == other.color_layouts &&
+                   num_color_attachments == other.num_color_attachments &&
+                   depth_format == other.depth_format && depth_samples == other.depth_samples &&
+                   depth_layout == other.depth_layout && depth_aspects == other.depth_aspects;
+        }
+    };
+    struct CachedLegacyRenderPass {
+        LegacyRenderPassKey key;
+        vk::UniqueRenderPass render_pass;
+    };
+    struct LegacyRenderTarget {
+        RenderState state;
+        vk::RenderPass render_pass;
+        vk::UniqueFramebuffer framebuffer;
+    };
+    struct PendingRenderTargets {
+        u64 tick;
+        std::vector<LegacyRenderTarget> targets;
+    };
+
 public:
     /// `threaded_recording`: Vulkan commands passed to Record() are recorded by a worker thread.
     explicit Scheduler(const Instance& instance, bool threaded_recording = false,
@@ -866,6 +901,10 @@ public:
         return work_semaphore.IsFree(tick);
     }
 
+    /// Allocates and updates a descriptor set that remains valid until its pool is retired.
+    vk::DescriptorSet AllocateDescriptorSet(vk::DescriptorSetLayout layout,
+                                             std::span<const vk::WriteDescriptorSet> writes);
+
     /// Returns the scheduler timeline semaphore.
     [[nodiscard]] Semaphore* GetWorkSemaphore() noexcept {
         return &work_semaphore;
@@ -907,6 +946,8 @@ private:
     vk::Queue execution_queue;
     Semaphore work_semaphore;
     CommandPool command_pool;
+    std::mutex descriptor_heap_mutex;
+    std::unique_ptr<DescriptorHeap> descriptor_heap;
     DynamicState dynamic_state;
     SubmitFunc on_submit{};
     vk::CommandBuffer current_cmdbuf;
@@ -927,6 +968,10 @@ private:
     std::jthread priority_pending_ops_thread;
     RenderState render_state;
     bool is_rendering = false;
+    std::vector<CachedLegacyRenderPass> render_pass_cache;
+    std::vector<LegacyRenderTarget> render_targets;
+    std::mutex render_targets_mutex;
+    std::deque<PendingRenderTargets> pending_render_targets;
     // bbport: threaded recording
     std::unique_ptr<RecordChunk> record_chunk;
     std::vector<std::unique_ptr<RecordChunk>> full_chunks;

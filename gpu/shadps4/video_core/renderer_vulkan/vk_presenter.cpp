@@ -158,11 +158,11 @@ Presenter::Presenter(Frontend::WindowSDL& window_, AmdGpu::Liverpool* liverpool_
     fsr_settings.rcas_attenuation =
         static_cast<float>(EmulatorSettings.GetRcasAttenuation() / 1000.f);
 
-    fsr_pass.Create(device, instance.GetAllocator(), num_images,
+    fsr_pass.Create(device, instance.GetAllocator(), num_images, draw_scheduler,
                     instance.IsShaderFloat16Supported());
     // bbport: frames are composed in RGBA8 (what frame generation reads and writes) and
     // blitted into the swapchain's format.
-    pp_pass.Create(device, FrameGenerator::ColorFormat);
+    pp_pass.Create(device, FrameGenerator::ColorFormat, draw_scheduler);
     // bbport: the overlay draws over every presented image, generated ones included: its
     // vertex buffers must not be reused while one of them is still drawn.
     BbOverlay::Init(instance, swapchain.GetSurfaceFormat().format,
@@ -725,29 +725,25 @@ Frame* Presenter::PrepareBlankFrame(bool present_thread) {
         .subresourceRange = simple_subresource,
     };
 
-    const vk::RenderingAttachmentInfo attachment = {
-        .imageView = frame->image_view,
-        .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-        .loadOp = vk::AttachmentLoadOp::eClear,
-        .storeOp = vk::AttachmentStoreOp::eStore,
-    };
-    const vk::RenderingInfo rendering_info = {
-        .renderArea =
-            {
-                .extent = {frame->width, frame->height},
-            },
-        .layerCount = 1,
-        .colorAttachmentCount = 1u,
-        .pColorAttachments = &attachment,
-    };
+    RenderState render_state{};
+    render_state.width = static_cast<u16>(frame->width);
+    render_state.height = static_cast<u16>(frame->height);
+    render_state.num_layers = 1;
+    render_state.num_color_attachments = 1;
+    auto& color_attachment = render_state.color_attachments[0];
+    color_attachment.image_view = frame->image_view;
+    color_attachment.image_layout = vk::ImageLayout::eColorAttachmentOptimal;
+    color_attachment.format = static_cast<u32>(FrameGenerator::ColorFormat);
+    color_attachment.samples = static_cast<u32>(vk::SampleCountFlagBits::e1);
+    color_attachment.is_clear = 1;
 
     cmdbuf.pipelineBarrier2(vk::DependencyInfo{
         .imageMemoryBarrierCount = 1,
         .pImageMemoryBarriers = &pre_barrier,
     });
 
-    cmdbuf.beginRendering(rendering_info);
-    cmdbuf.endRendering();
+    scheduler.BeginRendering(render_state);
+    scheduler.EndRendering();
 
     cmdbuf.pipelineBarrier2(vk::DependencyInfo{
         .imageMemoryBarrierCount = 1,

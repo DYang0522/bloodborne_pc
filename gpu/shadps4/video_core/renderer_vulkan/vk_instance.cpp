@@ -68,28 +68,43 @@ std::vector<std::string> GetSupportedExtensions(vk::PhysicalDevice physical) {
     return supported_extensions;
 }
 
-vk::FormatProperties3 GetFormatProperties(vk::PhysicalDevice physical, vk::Format format) {
+vk::FormatProperties3 GetFormatProperties(vk::PhysicalDevice physical, vk::Format format,
+                                                   bool supports_format_feature_flags2) {
     vk::FormatProperties3 properties3{};
     vk::FormatProperties2 properties2 = {
-        .pNext = &properties3,
+        .pNext = supports_format_feature_flags2 ? &properties3 : nullptr,
     };
     physical.getFormatProperties2(format, &properties2);
+    if (!supports_format_feature_flags2) {
+        // Vulkan 1.2 without VK_KHR_format_feature_flags2 still exposes the original
+        // 32-bit format flags. They map directly to the low bits of FormatFeatureFlags2.
+        properties3.linearTilingFeatures = vk::FormatFeatureFlags2{
+            static_cast<VkFormatFeatureFlags2>(
+                static_cast<VkFormatFeatureFlags>(properties2.formatProperties.linearTilingFeatures))};
+        properties3.optimalTilingFeatures = vk::FormatFeatureFlags2{
+            static_cast<VkFormatFeatureFlags2>(
+                static_cast<VkFormatFeatureFlags>(properties2.formatProperties.optimalTilingFeatures))};
+        properties3.bufferFeatures = vk::FormatFeatureFlags2{
+            static_cast<VkFormatFeatureFlags2>(
+                static_cast<VkFormatFeatureFlags>(properties2.formatProperties.bufferFeatures))};
+    }
     return properties3;
 }
 
 std::unordered_map<vk::Format, vk::FormatProperties3> GetFormatProperties(
-    vk::PhysicalDevice physical) {
+    vk::PhysicalDevice physical, bool supports_format_feature_flags2) {
     std::unordered_map<vk::Format, vk::FormatProperties3> format_properties;
     for (const auto& format_info : LiverpoolToVK::SurfaceFormats()) {
         const auto format = format_info.vk_format;
         if (!format_properties.contains(format)) {
-            format_properties.emplace(format, GetFormatProperties(physical, format));
+            format_properties.emplace(
+                format, GetFormatProperties(physical, format, supports_format_feature_flags2));
         }
     }
     for (const auto& format_info : LiverpoolToVK::DepthFormats()) {
         const auto format = format_info.vk_format;
         if (!format_properties.contains(format)) {
-            format_properties.emplace(format, GetFormatProperties(physical, format));
+            format_properties.emplace(format, GetFormatProperties(physical, format, supports_format_feature_flags2));
         }
     }
     // Other miscellaneous formats, e.g. for color buffers, swizzles, or compatibility
@@ -101,7 +116,7 @@ std::unordered_map<vk::Format, vk::FormatProperties3> GetFormatProperties(
     };
     for (const auto& format : misc_formats) {
         if (!format_properties.contains(format)) {
-            format_properties.emplace(format, GetFormatProperties(physical, format));
+            format_properties.emplace(format, GetFormatProperties(physical, format, supports_format_feature_flags2));
         }
     }
     return format_properties;
@@ -194,8 +209,12 @@ Instance::Instance(const Frontend::WindowSystemInfo& window_info, s32 physical_d
     }
 
     available_extensions = GetSupportedExtensions(physical_device);
-    format_properties = GetFormatProperties(physical_device);
     properties = physical_device.getProperties();
+    has_format_feature_flags2 =
+        properties.apiVersion >= VK_API_VERSION_1_3 ||
+        std::find(available_extensions.begin(), available_extensions.end(),
+                  VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME) != available_extensions.end();
+    format_properties = GetFormatProperties(physical_device, has_format_feature_flags2);
     memory_properties = physical_device.getMemoryProperties();
     CollectDeviceParameters();
     ASSERT_MSG(properties.apiVersion >= TargetVulkanApiVersion,
@@ -277,9 +296,39 @@ std::string Instance::GetDriverVersionName() {
 }
 
 bool Instance::CreateDevice() {
-    const vk::StructureChain feature_chain = physical_device.getFeatures2<
+    const bool is_vulkan_13 = properties.apiVersion >= VK_API_VERSION_1_3;
+    const auto supports_extension = [&](std::string_view extension) {
+        return std::find(available_extensions.begin(), available_extensions.end(), extension) !=
+               available_extensions.end();
+    };
+    const bool image_robustness_available =
+        is_vulkan_13 || supports_extension(VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME);
+    const bool shader_demote_available =
+        is_vulkan_13 || supports_extension(VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME);
+    const bool subgroup_size_control_available =
+        is_vulkan_13 || supports_extension(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
+    const bool synchronization2_available =
+        is_vulkan_13 || supports_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    const bool integer_dot_product_available =
+        is_vulkan_13 || supports_extension(VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME);
+    const bool maintenance4_available =
+        is_vulkan_13 || supports_extension(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
+    // VK_KHR_push_descriptor is optional: pipelines already fall back to ordinary
+    // descriptor-set allocation and updates when maxPushDescriptors is zero.
+    const bool push_descriptor_available =
+        properties.apiVersion >= VK_API_VERSION_1_4 ||
+        supports_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+    const bool format_feature_flags2_available =
+        is_vulkan_13 || supports_extension(VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME);
+
+    auto feature_chain = physical_device.getFeatures2<
         vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features,
-        vk::PhysicalDeviceVulkan12Features, vk::PhysicalDeviceVulkan13Features,
+        vk::PhysicalDeviceVulkan12Features, vk::PhysicalDeviceImageRobustnessFeaturesEXT,
+        vk::PhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT,
+        vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT,
+        vk::PhysicalDeviceSynchronization2FeaturesKHR,
+        vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR,
+        vk::PhysicalDeviceMaintenance4FeaturesKHR,
         vk::PhysicalDeviceRobustness2FeaturesEXT,
         vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT,
         vk::PhysicalDevicePrimitiveTopologyListRestartFeaturesEXT,
@@ -292,16 +341,51 @@ bool Instance::CreateDevice() {
         vk::PhysicalDeviceDescriptorBufferFeaturesEXT,
         vk::PhysicalDeviceFaultFeaturesEXT, vk::PhysicalDevicePresentIdFeaturesKHR,
         vk::PhysicalDeviceAntiLagFeaturesAMD>();
+    if (!image_robustness_available) {
+        feature_chain.unlink<vk::PhysicalDeviceImageRobustnessFeaturesEXT>();
+    }
+    if (!shader_demote_available) {
+        feature_chain.unlink<vk::PhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT>();
+    }
+    if (!subgroup_size_control_available) {
+        feature_chain.unlink<vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT>();
+    }
+    if (!synchronization2_available) {
+        feature_chain.unlink<vk::PhysicalDeviceSynchronization2FeaturesKHR>();
+    }
+    if (!integer_dot_product_available) {
+        feature_chain.unlink<vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR>();
+    }
+    if (!maintenance4_available) {
+        feature_chain.unlink<vk::PhysicalDeviceMaintenance4FeaturesKHR>();
+    }
     features = feature_chain.get().features;
 
-    const vk::StructureChain properties_chain = physical_device.getProperties2<
+    auto properties_chain = physical_device.getProperties2<
         vk::PhysicalDeviceProperties2, vk::PhysicalDeviceVulkan11Properties,
-        vk::PhysicalDeviceVulkan12Properties, vk::PhysicalDeviceVulkan13Properties,
+        vk::PhysicalDeviceVulkan12Properties,
+        vk::PhysicalDeviceSubgroupSizeControlPropertiesEXT,
+        vk::PhysicalDeviceMaintenance4PropertiesKHR,
         vk::PhysicalDevicePushDescriptorPropertiesKHR>();
+    if (!subgroup_size_control_available) {
+        properties_chain.unlink<vk::PhysicalDeviceSubgroupSizeControlPropertiesEXT>();
+    }
+    if (!maintenance4_available) {
+        properties_chain.unlink<vk::PhysicalDeviceMaintenance4PropertiesKHR>();
+    }
+    if (!push_descriptor_available) {
+        properties_chain.unlink<vk::PhysicalDevicePushDescriptorPropertiesKHR>();
+    }
     vk11_props = properties_chain.get<vk::PhysicalDeviceVulkan11Properties>();
     vk12_props = properties_chain.get<vk::PhysicalDeviceVulkan12Properties>();
-    vk13_props = properties_chain.get<vk::PhysicalDeviceVulkan13Properties>();
-    push_descriptor_props = properties_chain.get<vk::PhysicalDevicePushDescriptorPropertiesKHR>();
+    vk13_props = {};
+    vk13_props.maxSubgroupSize =
+        properties_chain.get<vk::PhysicalDeviceSubgroupSizeControlPropertiesEXT>().maxSubgroupSize;
+    vk13_props.maxBufferSize =
+        properties_chain.get<vk::PhysicalDeviceMaintenance4PropertiesKHR>().maxBufferSize;
+    push_descriptor_props = push_descriptor_available
+                                 ? properties_chain.get<vk::PhysicalDevicePushDescriptorPropertiesKHR>()
+                                 : vk::PhysicalDevicePushDescriptorPropertiesKHR{};
     LOG_INFO(Render_Vulkan, "Physical device subgroup size {}", vk11_props.subgroupSize);
 
     if (available_extensions.empty()) {
@@ -328,13 +412,33 @@ bool Instance::CreateDevice() {
     // Required
     ASSERT_MSG(add_extension(VK_KHR_SWAPCHAIN_EXTENSION_NAME),
                "Required Vulkan extension unavailable: {}", VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    ASSERT_MSG(add_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME),
-               "Required Vulkan extension unavailable: {}", VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+    if (supports_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME)) {
+        add_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+    }
+    if (!push_descriptor_available) {
+        LOG_INFO(Render_Vulkan,
+                 "VK_KHR_push_descriptor unavailable; using ordinary descriptor-set updates");
+    }
     ASSERT_MSG(add_extension(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME),
                "Required Vulkan extension unavailable: {}",
                VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
     ASSERT_MSG(add_extension(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME),
                "Required Vulkan extension unavailable: {}", VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+    ASSERT_MSG(is_vulkan_13 || add_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME),
+               "Required Vulkan extension unavailable: {}", VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    ASSERT_MSG(is_vulkan_13 || add_extension(VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME),
+               "Required Vulkan extension unavailable: {}",
+               VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME);
+
+    // Vulkan 1.3 promoted these extensions to core. On Vulkan 1.2, enable only the
+    // optional aliases actually advertised by the driver.
+    if (!is_vulkan_13) {
+        if (image_robustness_available) add_extension(VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME);
+        if (subgroup_size_control_available) add_extension(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
+        if (integer_dot_product_available) add_extension(VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME);
+        if (maintenance4_available) add_extension(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
+        if (format_feature_flags2_available) add_extension(VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME);
+    }
 
     const auto robustness2_features = feature_chain.get<vk::PhysicalDeviceRobustness2FeaturesEXT>();
     ASSERT_MSG(robustness2_features.robustBufferAccess2,
@@ -343,6 +447,11 @@ bool Instance::CreateDevice() {
                "Required Vulkan feature unavailable: robustImageAccess2");
     ASSERT_MSG(robustness2_features.nullDescriptor,
                "Required Vulkan feature unavailable: nullDescriptor");
+    ASSERT_MSG(feature_chain.get<vk::PhysicalDeviceSynchronization2FeaturesKHR>().synchronization2,
+               "Required Vulkan feature unavailable: synchronization2");
+    ASSERT_MSG(feature_chain.get<vk::PhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT>()
+                   .shaderDemoteToHelperInvocation,
+               "Required Vulkan feature unavailable: shaderDemoteToHelperInvocation");
 
     // Optional
     maintenance_5 = add_extension(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
@@ -535,23 +644,41 @@ bool Instance::CreateDevice() {
 
     const auto vk11_features = feature_chain.get<vk::PhysicalDeviceVulkan11Features>();
     vk12_features = feature_chain.get<vk::PhysicalDeviceVulkan12Features>();
-    vk13_features = feature_chain.get<vk::PhysicalDeviceVulkan13Features>();
+    vk13_features = {};
+    vk13_features.robustImageAccess =
+        feature_chain.get<vk::PhysicalDeviceImageRobustnessFeaturesEXT>().robustImageAccess;
+    vk13_features.shaderDemoteToHelperInvocation =
+        feature_chain.get<vk::PhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT>()
+            .shaderDemoteToHelperInvocation;
+    vk13_features.subgroupSizeControl =
+        feature_chain.get<vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT>().subgroupSizeControl;
+    vk13_features.synchronization2 =
+        feature_chain.get<vk::PhysicalDeviceSynchronization2FeaturesKHR>().synchronization2;
+    vk13_features.shaderIntegerDotProduct =
+        feature_chain.get<vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR>()
+            .shaderIntegerDotProduct;
+    vk13_features.maintenance4 =
+        feature_chain.get<vk::PhysicalDeviceMaintenance4FeaturesKHR>().maintenance4;
     // bbport: FSR 4.1.1 through the fsr4vk provider DLL (vk_fsr4vk.cpp). Its device requirements
     // (provider/INTEGRATION-CONTRACT.md) are standard features and two extensions; they are
     // requested only when the DLL is installed and the device has all of them, so nothing changes
     // for other paths.
 #ifdef _WIN32
-    const char* missing_fsr4vk_feature = Fsr411VulkanRequirement(physical_device,
-        VULKAN_HPP_DEFAULT_DISPATCHER.vkGetPhysicalDeviceProperties,
-        VULKAN_HPP_DEFAULT_DISPATCHER.vkEnumerateDeviceExtensionProperties,
-        VULKAN_HPP_DEFAULT_DISPATCHER.vkGetPhysicalDeviceFeatures2);
+    const char* missing_fsr4vk_feature =
+        properties.apiVersion < VK_API_VERSION_1_3
+            ? "Vulkan 1.3"
+            : Fsr411VulkanRequirement(physical_device,
+                  VULKAN_HPP_DEFAULT_DISPATCHER.vkGetPhysicalDeviceProperties,
+                  VULKAN_HPP_DEFAULT_DISPATCHER.vkEnumerateDeviceExtensionProperties,
+                  VULKAN_HPP_DEFAULT_DISPATCHER.vkGetPhysicalDeviceFeatures2);
     const bool fsr4vk_files = Fsr4Vk::FilesPresent();
-    fsr4vk = fsr4vk_files && !missing_fsr4vk_feature;
+    fsr4vk = properties.apiVersion >= VK_API_VERSION_1_3 && fsr4vk_files &&
+             !missing_fsr4vk_feature;
     const char* fsr4vk_enabled = std::getenv("BB_FSR4VK");
     const bool query_failed = missing_fsr4vk_feature &&
         !std::strcmp(missing_fsr4vk_feature, "Vulkan extension query");
     fsr4vk_status = fsr4vk ? 0 : fsr4vk_enabled && fsr4vk_enabled[0] == '0' ? 6 :
-        missing_fsr4vk_feature && !query_failed ? 2 : !fsr4vk_files ? 4 : 5;
+        !fsr4vk_files ? 4 : missing_fsr4vk_feature && !query_failed ? 2 : 5;
     if (!native_requested && !fsr4vk) {
         if (const char* enabled = std::getenv("BB_FSR4VK"); enabled && enabled[0] == '0')
             fsr411_problem = "Vulkan (fsr4vk): disabled by BB_FSR4VK=0";
@@ -615,7 +742,9 @@ bool Instance::CreateDevice() {
                 .shaderStorageImageExtendedFormats = features.shaderStorageImageExtendedFormats,
                 .shaderStorageImageMultisample = features.shaderStorageImageMultisample,
                 // bbport: required by the FSR 3 accumulate shaders (vk_temporal_upscaler).
-                .shaderStorageImageReadWithoutFormat = fsr4vk,
+                // This is a core Vulkan 1.0 feature. Keep it enabled whenever the physical
+                // device supports it; restricting it to FSR4VK breaks guest storage-image reads.
+                .shaderStorageImageReadWithoutFormat = features.shaderStorageImageReadWithoutFormat,
                 .shaderStorageImageWriteWithoutFormat =
                     features.shaderStorageImageWriteWithoutFormat,
                 .shaderClipDistance = features.shaderClipDistance,
@@ -648,13 +777,22 @@ bool Instance::CreateDevice() {
             .bufferDeviceAddress = vk12_features.bufferDeviceAddress,
             .shaderOutputLayer = vk12_features.shaderOutputLayer,
         },
-        vk::PhysicalDeviceVulkan13Features{
+        vk::PhysicalDeviceImageRobustnessFeaturesEXT{
             .robustImageAccess = vk13_features.robustImageAccess,
+        },
+        vk::PhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT{
             .shaderDemoteToHelperInvocation = vk13_features.shaderDemoteToHelperInvocation,
+        },
+        vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT{
             .subgroupSizeControl = vk13_features.subgroupSizeControl,
+        },
+        vk::PhysicalDeviceSynchronization2FeaturesKHR{
             .synchronization2 = vk13_features.synchronization2,
-            .dynamicRendering = vk13_features.dynamicRendering,
+        },
+        vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR{
             .shaderIntegerDotProduct = vk13_features.shaderIntegerDotProduct,
+        },
+        vk::PhysicalDeviceMaintenance4FeaturesKHR{
             .maintenance4 = vk13_features.maintenance4,
         },
         vk::PhysicalDeviceMutableDescriptorTypeFeaturesEXT{.mutableDescriptorType = fsr4vk},
@@ -753,6 +891,18 @@ bool Instance::CreateDevice() {
         },
     };
 
+    if (!image_robustness_available) {
+        device_chain.unlink<vk::PhysicalDeviceImageRobustnessFeaturesEXT>();
+    }
+    if (!subgroup_size_control_available) {
+        device_chain.unlink<vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT>();
+    }
+    if (!integer_dot_product_available) {
+        device_chain.unlink<vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR>();
+    }
+    if (!maintenance4_available) {
+        device_chain.unlink<vk::PhysicalDeviceMaintenance4FeaturesKHR>();
+    }
     if (!fsr4vk) {
         device_chain.unlink<vk::PhysicalDeviceMutableDescriptorTypeFeaturesEXT>();
         device_chain.unlink<vk::PhysicalDeviceDescriptorBufferFeaturesEXT>();
@@ -847,6 +997,19 @@ bool Instance::CreateDevice() {
     device = std::move(dev);
 
     VULKAN_HPP_DEFAULT_DISPATCHER.init(*device);
+    if (!is_vulkan_13) {
+        // Vulkan-Hpp's core command wrappers call the 1.3 entry-point names. On a 1.2
+        // device, route those wrappers to the enabled KHR aliases.
+        ASSERT_MSG(VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdPipelineBarrier2KHR &&
+                       VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdWriteTimestamp2KHR,
+                   "Required Vulkan 1.2 synchronization entry points are unavailable");
+        VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdPipelineBarrier2 =
+            reinterpret_cast<PFN_vkCmdPipelineBarrier2>(
+                VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdPipelineBarrier2KHR);
+        VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdWriteTimestamp2 =
+            reinterpret_cast<PFN_vkCmdWriteTimestamp2>(
+                VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdWriteTimestamp2KHR);
+    }
     LowLatency::Init(*this);
     if (Dlss* dlss = Dlss::Get()) {
         dlss->Initialize(*instance, physical_device, *device);
@@ -1085,7 +1248,20 @@ vk::FormatFeatureFlags2 Instance::GetFormatFeatureFlags(vk::Format format) const
         UNIMPLEMENTED_MSG("Properties of format {} have not been queried.", vk::to_string(format));
     }
 
-    return it->second.optimalTilingFeatures | it->second.bufferFeatures;
+    auto flags = it->second.optimalTilingFeatures | it->second.bufferFeatures;
+    if (!has_format_feature_flags2 && (flags & vk::FormatFeatureFlagBits2::eStorageImage)) {
+        // Vulkan 1.2 drivers without VK_KHR_format_feature_flags2 can report only the
+        // legacy 32-bit format flags. The two formatless-storage bits have no legacy
+        // representation, so derive them from the corresponding core device features.
+        // Restrict the inference to formats that advertise STORAGE_IMAGE support.
+        if (features.shaderStorageImageReadWithoutFormat) {
+            flags |= vk::FormatFeatureFlagBits2::eStorageReadWithoutFormat;
+        }
+        if (features.shaderStorageImageWriteWithoutFormat) {
+            flags |= vk::FormatFeatureFlagBits2::eStorageWriteWithoutFormat;
+        }
+    }
+    return flags;
 }
 
 bool Instance::IsFormatSupported(const vk::Format format,

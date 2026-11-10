@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <thread>
+#include <bit>
+#include <iterator>
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -20,11 +22,28 @@
 #include "imgui/renderer/texture_manager.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
+#include "video_core/renderer_vulkan/vk_render_pass.h"
 #include "bbport_threads.h"
 
 namespace Vulkan {
 
 std::mutex Scheduler::submit_mutex;
+
+namespace {
+const std::array DescriptorPoolSizes{
+    vk::DescriptorPoolSize{vk::DescriptorType::eSampler, 8192},
+    vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 8192},
+    vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage, 8192},
+    vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage, 8192},
+    vk::DescriptorPoolSize{vk::DescriptorType::eUniformTexelBuffer, 2048},
+    vk::DescriptorPoolSize{vk::DescriptorType::eStorageTexelBuffer, 2048},
+    vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 8192},
+    vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, 8192},
+    vk::DescriptorPoolSize{vk::DescriptorType::eUniformBufferDynamic, 2048},
+    vk::DescriptorPoolSize{vk::DescriptorType::eStorageBufferDynamic, 2048},
+    vk::DescriptorPoolSize{vk::DescriptorType::eInputAttachment, 1024},
+};
+} // namespace
 
 void Scheduler::SetExecutionQueue(vk::Queue queue) {
     if (execution_queue == queue) {
@@ -71,68 +90,137 @@ void Scheduler::BeginRendering(const RenderState& new_state) {
         return;
     }
     EndRendering();
+
+    auto target_it = std::find_if(render_targets.begin(), render_targets.end(),
+                                  [&](const LegacyRenderTarget& target) {
+                                      return target.state == new_state;
+                                  });
+    if (target_it == render_targets.end()) {
+        LegacyRenderPassKey key{};
+        key.num_color_attachments = new_state.num_color_attachments;
+        std::array<vk::Format, 8> color_formats{};
+        std::array<vk::SampleCountFlagBits, 8> color_samples{};
+        std::array<vk::ImageLayout, 8> color_layouts{};
+        std::vector<vk::ImageView> views;
+        for (u32 i = 0; i < new_state.num_color_attachments; ++i) {
+            const auto& attachment = new_state.color_attachments[i];
+            color_formats[i] = attachment.image_view
+                                   ? static_cast<vk::Format>(attachment.format)
+                                   : vk::Format::eUndefined;
+            color_samples[i] = attachment.samples
+                                   ? static_cast<vk::SampleCountFlagBits>(attachment.samples)
+                                   : vk::SampleCountFlagBits::e1;
+            color_layouts[i] = attachment.image_view
+                                   ? attachment.image_layout
+                                   : vk::ImageLayout::eUndefined;
+            key.color_formats[i] = static_cast<u32>(color_formats[i]);
+            key.color_samples[i] = static_cast<u32>(color_samples[i]);
+            key.color_layouts[i] = static_cast<u32>(color_layouts[i]);
+            if (attachment.image_view && color_formats[i] != vk::Format::eUndefined) {
+                views.push_back(attachment.image_view);
+            }
+        }
+
+        const auto& depth = new_state.depth_stencil_attachment;
+        const bool has_depth_attachment =
+            depth.image_view && (depth.has_depth || depth.has_stencil) &&
+            depth.format != static_cast<u32>(vk::Format::eUndefined);
+        const auto depth_format = has_depth_attachment
+                                      ? static_cast<vk::Format>(depth.format)
+                                      : vk::Format::eUndefined;
+        const auto depth_samples = depth.samples
+                                       ? static_cast<vk::SampleCountFlagBits>(depth.samples)
+                                       : vk::SampleCountFlagBits::e1;
+        const auto depth_layout = has_depth_attachment
+                                      ? depth.image_layout
+                                      : vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        vk::ImageAspectFlags depth_aspects{};
+        if (has_depth_attachment) {
+            views.push_back(depth.image_view);
+            if (depth.has_depth) depth_aspects |= vk::ImageAspectFlagBits::eDepth;
+            if (depth.has_stencil) depth_aspects |= vk::ImageAspectFlagBits::eStencil;
+        }
+        key.depth_format = static_cast<u32>(depth_format);
+        key.depth_samples = static_cast<u32>(depth_samples);
+        key.depth_layout = static_cast<u32>(depth_layout);
+        key.depth_aspects = static_cast<u32>(depth_aspects);
+
+        auto pass_it = std::find_if(render_pass_cache.begin(), render_pass_cache.end(),
+                                    [&](const CachedLegacyRenderPass& cached) {
+                                        return cached.key == key;
+                                    });
+        if (pass_it == render_pass_cache.end()) {
+            const vk::AttachmentSampleCountInfoAMD mixed_samples{
+                .colorAttachmentCount = new_state.num_color_attachments,
+                .pColorAttachmentSamples = color_samples.data(),
+                .depthStencilAttachmentSamples = depth_samples,
+            };
+            auto render_pass = CreateLegacyRenderPass(
+                instance.GetDevice(),
+                std::span<const vk::Format>{color_formats.data(), new_state.num_color_attachments},
+                std::span<const vk::SampleCountFlagBits>{color_samples.data(),
+                                                          new_state.num_color_attachments},
+                depth_format, depth_samples,
+                std::span<const vk::ImageLayout>{color_layouts.data(),
+                                                  new_state.num_color_attachments},
+                depth_layout, depth_aspects,
+                instance.IsMixedDepthSamplesSupported() ? &mixed_samples : nullptr);
+            render_pass_cache.push_back({key, std::move(render_pass)});
+            pass_it = std::prev(render_pass_cache.end());
+        }
+        const auto render_pass = *pass_it->render_pass;
+        auto framebuffer = CreateLegacyFramebuffer(instance.GetDevice(), render_pass, views,
+                                                    new_state.width, new_state.height,
+                                                    new_state.num_layers);
+        render_targets.push_back(LegacyRenderTarget{new_state, render_pass,
+                                                    std::move(framebuffer)});
+        target_it = std::prev(render_targets.end());
+    }
+
+    const vk::RenderPassBeginInfo begin_info{
+        .renderPass = target_it->render_pass,
+        .framebuffer = *target_it->framebuffer,
+        .renderArea = {{0, 0}, {new_state.width, new_state.height}},
+    };
+    const vk::ClearRect clear_rect{
+        .rect = {{0, 0}, {new_state.width, new_state.height}},
+        .baseArrayLayer = 0,
+        .layerCount = new_state.num_layers,
+    };
+    std::vector<vk::ClearAttachment> clears;
+    for (u32 i = 0; i < new_state.num_color_attachments; ++i) {
+        const auto& attachment = new_state.color_attachments[i];
+        if (attachment.image_view && attachment.is_clear) {
+            clears.push_back({
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .colorAttachment = i,
+                .clearValue = vk::ClearValue{
+                    .color = vk::ClearColorValue{.uint32 = attachment.clear_value}},
+            });
+        }
+    }
+    const auto& depth = new_state.depth_stencil_attachment;
+    if (depth.image_view) {
+        vk::ImageAspectFlags aspects{};
+        if (depth.depth_clear) aspects |= vk::ImageAspectFlagBits::eDepth;
+        if (depth.stencil_clear) aspects |= vk::ImageAspectFlagBits::eStencil;
+        if (aspects) {
+            clears.push_back({
+                .aspectMask = aspects,
+                .clearValue = vk::ClearValue{
+                    .depthStencil = vk::ClearDepthStencilValue{
+                        .depth = std::bit_cast<float>(depth.clear_value[0]),
+                        .stencil = depth.clear_value[1]}},
+            });
+        }
+    }
     is_rendering = true;
     render_state = new_state;
-
-    std::array<vk::RenderingAttachmentInfo, 8> color_attachments;
-    for (u32 i = 0; i < render_state.num_color_attachments; ++i) {
-        const auto& cb = render_state.color_attachments[i];
-        color_attachments[i] = vk::RenderingAttachmentInfo{
-            .imageView = cb.image_view,
-            .imageLayout = cb.image_layout,
-            .loadOp = cb.is_clear ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad,
-            .storeOp = vk::AttachmentStoreOp::eStore,
-            .clearValue = vk::ClearValue{.color = vk::ClearColorValue{.uint32 = cb.clear_value}},
-        };
-    }
-
-    const auto& db = render_state.depth_stencil_attachment;
-    const vk::RenderingAttachmentInfo depth_attachment = {
-        .imageView = db.image_view,
-        .imageLayout = db.image_layout,
-        .loadOp = db.depth_clear ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad,
-        .storeOp = vk::AttachmentStoreOp::eStore,
-        .clearValue =
-            vk::ClearValue{.depthStencil = vk::ClearDepthStencilValue{.depth = std::bit_cast<float>(
-                                                                          db.clear_value[0])}},
-    };
-    const vk::RenderingAttachmentInfo stencil_attachment = {
-        .imageView = db.image_view,
-        .imageLayout = db.image_layout,
-        .loadOp = db.stencil_clear ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad,
-        .storeOp = vk::AttachmentStoreOp::eStore,
-        .clearValue = vk::ClearValue{.depthStencil =
-                                         vk::ClearDepthStencilValue{.stencil = db.clear_value[1]}},
-    };
-
-    const vk::RenderingInfo rendering_info = {
-        .renderArea =
-            {
-                .offset = {0, 0},
-                .extent = {render_state.width, render_state.height},
-            },
-        .layerCount = render_state.num_layers,
-        .colorAttachmentCount = render_state.num_color_attachments,
-        .pColorAttachments = color_attachments.data(),
-        .pDepthAttachment = db.has_depth ? &depth_attachment : nullptr,
-        .pStencilAttachment = db.has_stencil ? &stencil_attachment : nullptr,
-    };
-
-    if (!recording_threaded) {
-        current_cmdbuf.beginRendering(rendering_info);
-        return;
-    }
-    // The attachment infos live on this stack frame: the recorded closure keeps copies.
-    Record([info = rendering_info, color_attachments, depth_attachment,
-            stencil_attachment](vk::CommandBuffer cmdbuf) mutable {
-        info.pColorAttachments = color_attachments.data();
-        if (info.pDepthAttachment) {
-            info.pDepthAttachment = &depth_attachment;
+    Record([begin_info, clear_rect, clears = std::move(clears)](vk::CommandBuffer cmdbuf) {
+        cmdbuf.beginRenderPass(begin_info, vk::SubpassContents::eInline);
+        if (!clears.empty()) {
+            cmdbuf.clearAttachments(clears, clear_rect);
         }
-        if (info.pStencilAttachment) {
-            info.pStencilAttachment = &stencil_attachment;
-        }
-        cmdbuf.beginRendering(info);
     });
 }
 
@@ -141,7 +229,25 @@ void Scheduler::EndRendering() {
         return;
     }
     is_rendering = false;
-    Record([](vk::CommandBuffer cmdbuf) { cmdbuf.endRendering(); });
+    Record([](vk::CommandBuffer cmdbuf) { cmdbuf.endRenderPass(); });
+}
+
+vk::DescriptorSet Scheduler::AllocateDescriptorSet(
+    vk::DescriptorSetLayout layout, std::span<const vk::WriteDescriptorSet> writes) {
+    std::scoped_lock lock{descriptor_heap_mutex};
+    if (!descriptor_heap) {
+        descriptor_heap = std::make_unique<DescriptorHeap>(instance, &work_semaphore,
+                                                            DescriptorPoolSizes, 2048);
+    }
+    const auto set = descriptor_heap->Commit(layout);
+    if (!writes.empty()) {
+        std::vector<vk::WriteDescriptorSet> updated(writes.begin(), writes.end());
+        for (auto& write : updated) {
+            write.dstSet = set;
+        }
+        instance.GetDevice().updateDescriptorSets(updated, {});
+    }
+    return set;
 }
 
 void Scheduler::TraceDirectRecording(void* caller) {
@@ -361,9 +467,20 @@ void Scheduler::Wait(u64 tick) {
     }
     BbStats::WaitTimer timer{BbStats::tick_wait_ns};
     work_semaphore.Wait(tick);
+    PopPendingOperations();
 }
 
 void Scheduler::PopPendingOperations() {
+    {
+        std::scoped_lock lk{render_targets_mutex};
+        if (!pending_render_targets.empty()) {
+            work_semaphore.Refresh();
+            while (!pending_render_targets.empty() &&
+                   work_semaphore.IsFree(pending_render_targets.front().tick)) {
+                pending_render_targets.pop_front();
+            }
+        }
+    }
     if (num_pending_ops.load(std::memory_order_acquire) == 0) {
         return; // every draw comes here
     }
@@ -475,6 +592,11 @@ void Scheduler::SubmitExecution(SubmitInfo& info) {
     }
     ASSERT_MSG(submit_result != vk::Result::eErrorDeviceLost, "Device lost during submit");
 
+    if (!render_targets.empty()) {
+        std::scoped_lock lk{render_targets_mutex};
+        pending_render_targets.push_back({signal_value, std::move(render_targets)});
+        render_targets.clear();
+    }
     work_semaphore.Refresh();
     AllocateWorkerCommandBuffers();
 

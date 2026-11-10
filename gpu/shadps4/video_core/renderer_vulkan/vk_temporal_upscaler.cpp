@@ -571,8 +571,7 @@ void TemporalUpscaler::CreatePipelines() {
                            .stageFlags = vk::ShaderStageFlagBits::eCompute};
         }
         layout = Check(device.createDescriptorSetLayoutUnique({
-            .flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
-            .bindingCount = count,
+                        .bindingCount = count,
             .pBindings = bindings.data(),
         }));
         const vk::PushConstantRange push{.stageFlags = vk::ShaderStageFlagBits::eCompute,
@@ -608,8 +607,7 @@ void TemporalUpscaler::CreatePipelines() {
                            .stageFlags = vk::ShaderStageFlagBits::eCompute};
         }
         merge_desc_layout = Check(device.createDescriptorSetLayoutUnique({
-            .flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
-            .bindingCount = u32(bindings.size()),
+                        .bindingCount = u32(bindings.size()),
             .pBindings = bindings.data(),
         }));
         const vk::PushConstantRange push{.stageFlags = vk::ShaderStageFlagBits::eCompute,
@@ -638,8 +636,7 @@ void TemporalUpscaler::CreatePipelines() {
                 .descriptorCount = 1, .stageFlags = vk::ShaderStageFlagBits::eCompute};
         }
         taa_desc_layout = Check(device.createDescriptorSetLayoutUnique({
-            .flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
-            .bindingCount = u32(bindings.size()), .pBindings = bindings.data()}));
+                        .bindingCount = u32(bindings.size()), .pBindings = bindings.data()}));
         const vk::PushConstantRange push{vk::ShaderStageFlagBits::eCompute, 0, 64};
         taa_pipeline_layout = Check(device.createPipelineLayoutUnique({
             .setLayoutCount = 1, .pSetLayouts = &*taa_desc_layout,
@@ -719,7 +716,8 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
             std::printf("TAA diagnostic: reset=%u jitter=%.6f,%.6f mode=%u\n",
                         params.reset, jitter[0], jitter[1], params.pad);
     }
-    cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute, *taa_pipeline_layout, 0, writes);
+    cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *taa_pipeline_layout, 0,
+                             scheduler.AllocateDescriptorSet(*taa_desc_layout, writes), {});
     cmdbuf.pushConstants(*taa_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
                          sizeof(params), &params);
     cmdbuf.dispatch((out_width + 7) / 8, (out_height + 7) / 8, 1);
@@ -741,8 +739,8 @@ void TemporalUpscaler::RecordTaa(vk::CommandBuffer cmdbuf, vk::ImageView color,
             sharpen_writes[i] = {.dstBinding = i, .descriptorCount = 1,
                 .descriptorType = vk::DescriptorType::eStorageImage, .pImageInfo = &sharpen_infos[i]};
         cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *taa_sharpen_pipeline);
-        cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute,
-                                    *taa_sharpen_pipeline_layout, 0, sharpen_writes);
+        cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *taa_sharpen_pipeline_layout, 0,
+                                  scheduler.AllocateDescriptorSet(*taa_sharpen_desc_layout, sharpen_writes), {});
         cmdbuf.pushConstants(*taa_sharpen_pipeline_layout, vk::ShaderStageFlagBits::eCompute,
                              0, sizeof(strength), &strength);
         cmdbuf.dispatch((out_width + 7) / 8, (out_height + 7) / 8, 1);
@@ -815,8 +813,8 @@ bool TemporalUpscaler::DirectSharpen(vk::CommandBuffer cmdbuf, Fsr4Upscaler::Ima
                      .pImageInfo = &images[i]};
     }
     cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *taa_sharpen_direct_pipeline);
-    cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute, *taa_sharpen_pipeline_layout, 0,
-                                writes);
+    cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *taa_sharpen_pipeline_layout, 0,
+                              scheduler.AllocateDescriptorSet(*taa_sharpen_desc_layout, writes), {});
     cmdbuf.pushConstants(*taa_sharpen_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
                          sizeof(strength), &strength);
     cmdbuf.dispatch((w + 7) / 8, (h + 7) / 8, 1);
@@ -918,8 +916,8 @@ void TemporalUpscaler::ExtraSharpen(vk::CommandBuffer cmdbuf, vk::Image target, 
             .descriptorType = vk::DescriptorType::eStorageImage, .pImageInfo = &infos[i]};
     cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute,
                         ldr ? *taa_sharpen_ldr_pipeline : *taa_sharpen_pipeline);
-    cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute, *taa_sharpen_pipeline_layout, 0,
-                                writes);
+    cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *taa_sharpen_pipeline_layout, 0,
+                              scheduler.AllocateDescriptorSet(*taa_sharpen_desc_layout, writes), {});
     cmdbuf.pushConstants(*taa_sharpen_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
                          sizeof(extra), &extra);
     cmdbuf.dispatch((w + 7) / 8, (h + 7) / 8, 1);
@@ -1050,6 +1048,21 @@ bool TemporalUpscaler::RecordReactive(vk::ImageView color_view) {
     const auto& settings = BbSettings::Get();
     const std::array<float, 3> params{settings.reactive_scale, settings.reactive_max,
                                       settings.reactive_threshold};
+    const vk::DescriptorImageInfo opaque_info{.imageView = opaque,
+                                              .imageLayout = vk::ImageLayout::eGeneral};
+    const vk::DescriptorImageInfo scene_info{.imageView = color_view,
+                                             .imageLayout = vk::ImageLayout::eGeneral};
+    const vk::DescriptorImageInfo mask_info{.imageView = mask,
+                                            .imageLayout = vk::ImageLayout::eGeneral};
+    const std::array<vk::WriteDescriptorSet, 3> writes = {{
+        {.dstBinding = 0, .descriptorCount = 1,
+         .descriptorType = vk::DescriptorType::eStorageImage, .pImageInfo = &opaque_info},
+        {.dstBinding = 1, .descriptorCount = 1,
+         .descriptorType = vk::DescriptorType::eStorageImage, .pImageInfo = &scene_info},
+        {.dstBinding = 2, .descriptorCount = 1,
+         .descriptorType = vk::DescriptorType::eStorageImage, .pImageInfo = &mask_info},
+    }};
+    const auto descriptor_set = scheduler.AllocateDescriptorSet(*reactive_desc_layout, writes);
     scheduler.Record([=](vk::CommandBuffer cmdbuf) {
         const vk::ImageMemoryBarrier2 to_write{
             .srcStageMask = vk::PipelineStageFlagBits2::eAllCommands,
@@ -1062,29 +1075,8 @@ bool TemporalUpscaler::RecordReactive(vk::ImageView color_view) {
             .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1},
         };
         cmdbuf.pipelineBarrier2({.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &to_write});
-        const vk::DescriptorImageInfo opaque_info{.imageView = opaque,
-                                                  .imageLayout = vk::ImageLayout::eGeneral};
-        const vk::DescriptorImageInfo scene_info{.imageView = color_view,
-                                                 .imageLayout = vk::ImageLayout::eGeneral};
-        const vk::DescriptorImageInfo mask_info{.imageView = mask,
-                                                .imageLayout = vk::ImageLayout::eGeneral};
-        const std::array<vk::WriteDescriptorSet, 3> writes = {{
-            {.dstBinding = 0,
-             .descriptorCount = 1,
-             .descriptorType = vk::DescriptorType::eStorageImage,
-             .pImageInfo = &opaque_info},
-            {.dstBinding = 1,
-             .descriptorCount = 1,
-             .descriptorType = vk::DescriptorType::eStorageImage,
-             .pImageInfo = &scene_info},
-            {.dstBinding = 2,
-             .descriptorCount = 1,
-             .descriptorType = vk::DescriptorType::eStorageImage,
-             .pImageInfo = &mask_info},
-        }};
         cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline);
-        cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute, layout, 0,
-                                    writes);
+        cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, layout, 0, descriptor_set, {});
         cmdbuf.pushConstants(layout, vk::ShaderStageFlagBits::eCompute, 0,
                              sizeof(params), params.data());
         cmdbuf.dispatch((w + 7) / 8, (h + 7) / 8, 1);
@@ -1333,8 +1325,8 @@ void TemporalUpscaler::Run() {
                          : debug_view == BbSettings::DebugMotion ? 2
                                                                  : 0;
         cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, *merge_pipeline);
-        cmdbuf.pushDescriptorSetKHR(vk::PipelineBindPoint::eCompute, *merge_pipeline_layout, 0,
-                                    writes);
+        cmdbuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *merge_pipeline_layout, 0,
+                                  scheduler.AllocateDescriptorSet(*merge_desc_layout, writes), {});
         cmdbuf.pushConstants(*merge_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0,
                              sizeof(mode), &mode);
         cmdbuf.dispatch((ow + 7) / 8, (oh + 7) / 8, 1);

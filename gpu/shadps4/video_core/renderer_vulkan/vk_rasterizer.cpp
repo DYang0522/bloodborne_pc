@@ -2913,6 +2913,11 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
             attachment.image_view = target.view;
             attachment.image_layout = target.layout;
         }
+        attachment.format = static_cast<u32>(image_view.info.format);
+        attachment.samples = static_cast<u32>(
+            (reduced || color_redirected || !key.color_samples[cb])
+                ? vk::SampleCountFlagBits::e1
+                : LiverpoolToVK::NumSamples(key.color_samples[cb], instance.GetColorSampleCounts()));
         image->usage.render_target = 1u;
         if (cb == 0 && upscaler->Enabled()) {
             color_redirected = upscaler->RedirectColor(image_id, desc.view_info, redirect);
@@ -2921,6 +2926,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
                 original_color = {attachment.image_view, attachment.image_layout};
                 attachment.image_view = redirect.view;
                 attachment.image_layout = redirect.layout;
+                attachment.samples = static_cast<u32>(vk::SampleCountFlagBits::e1);
             }
         }
     }
@@ -2987,6 +2993,11 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
             attachment.image_view = target.view;
             attachment.image_layout = target.layout;
         }
+        attachment.format = static_cast<u32>(image_view.info.format);
+        attachment.samples = static_cast<u32>(
+            (reduced || depth_redirected)
+                ? vk::SampleCountFlagBits::e1
+                : LiverpoolToVK::NumSamples(key.depth_samples, instance.GetDepthSampleCounts()));
         image.usage.depth_target = true;
         if (upscaler->Enabled()) {
             VulkanUpscalerTarget depth_redirect;
@@ -2995,6 +3006,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
                 guest_extent = {image.info.size.width, image.info.size.height};
                 attachment.image_view = depth_redirect.view;
                 attachment.image_layout = depth_redirect.layout;
+                attachment.samples = static_cast<u32>(vk::SampleCountFlagBits::e1);
                 redirect = depth_redirect;
             }
         }
@@ -3034,12 +3046,16 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
             if (color_redirected) {
                 state.color_attachments[0].image_view = original_color.first;
                 state.color_attachments[0].image_layout = original_color.second;
+                state.color_attachments[0].samples = static_cast<u32>(
+                    LiverpoolToVK::NumSamples(key.color_samples[0], instance.GetColorSampleCounts()));
             }
             if (depth_redirected) {
                 auto& depth_image = texture_cache.GetImage(db_desc.first);
                 state.depth_stencil_attachment.image_view =
                     *texture_cache.FindDepthTarget(db_desc.first, db_desc.second).image_view;
                 state.depth_stencil_attachment.image_layout = depth_image.backing->state.layout;
+                state.depth_stencil_attachment.samples = static_cast<u32>(
+                    LiverpoolToVK::NumSamples(key.depth_samples, instance.GetDepthSampleCounts()));
             }
         } else {
             state.width = redirect.width;

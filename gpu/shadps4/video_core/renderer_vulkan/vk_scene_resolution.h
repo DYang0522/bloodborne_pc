@@ -112,6 +112,7 @@ private:
     vk::UniqueShaderModule fs_tri_vert, depth_frag, depth_stencil_frag, stencil_bits_frag;
     vk::UniqueDescriptorSetLayout resample_set_layout;
     vk::UniquePipelineLayout resample_layout;
+    std::vector<vk::UniqueRenderPass> resample_render_passes;
     std::vector<std::pair<std::pair<vk::Format, bool>, vk::UniquePipeline>> resample_pipelines;
 };
 } // namespace Vulkan

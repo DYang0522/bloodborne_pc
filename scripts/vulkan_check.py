@@ -16,15 +16,19 @@ working discrete card: a GeForce whose Vulkan driver does not answer leaves the 
 graphics (a player's RTX 5070 Ti, 30 October 2026). "held_back": discrete cards Vulkan lists but whose driver
 lacks something, while the game runs on the processor's graphics (only then present).
 
-tests/test_vulkan_check.py keeps API, REQUIRED_EXTENSIONS and REQUIRED_FEATURES equal to the renderer's."""
+tests/test_vulkan_check.py keeps the API baseline, required extensions and feature bits in sync with the renderer."""
 import ctypes
 import json
 import os
 import sys
 
-API = (1 << 22) | (3 << 12)  # VK_API_VERSION_1_3: the loader and the card need at least this
-REQUIRED_EXTENSIONS = ('VK_KHR_swapchain', 'VK_KHR_push_descriptor', 'VK_EXT_vertex_attribute_divisor',
-                       'VK_EXT_robustness2')
+API = (1 << 22) | (2 << 12)  # VK_API_VERSION_1_2: the loader and the card need at least this
+VULKAN_12_EXTENSIONS = ('VK_KHR_synchronization2',
+                       'VK_EXT_shader_demote_to_helper_invocation')
+VULKAN_12_FEATURES = ('synchronization2', 'shaderDemoteToHelperInvocation')
+VULKAN_13 = (1 << 22) | (3 << 12)
+# Push descriptors are optional: the renderer uses ordinary descriptor sets when unavailable.
+REQUIRED_EXTENSIONS = ('VK_KHR_swapchain', 'VK_EXT_vertex_attribute_divisor', 'VK_EXT_robustness2')
 REQUIRED_FEATURES = ('robustBufferAccess2', 'robustImageAccess2', 'nullDescriptor')  # of VK_EXT_robustness2
 DISCRETE, CPU = 2, 4  # VkPhysicalDeviceType
 TYPES = {0: 'other', 1: 'integrated', 2: 'discrete', 3: 'virtual', 4: 'cpu'}
@@ -36,7 +40,7 @@ def version_text(version):
 
 
 def ranked(devices):
-    """The order vk_instance.cpp picks a card in when BB_GPU_ID is not set: Vulkan 1.3 first, then a
+    """The order vk_instance.cpp picks a card in when BB_GPU_ID is not set: Vulkan 1.2 first, then a
     discrete card, then anything but a software renderer, then the most video memory."""
     return sorted(range(len(devices)), key=lambda i: (devices[i]['api'] < API, devices[i]['type'] != DISCRETE,
                                                       devices[i]['type'] == CPU, -devices[i]['memory']))
@@ -44,10 +48,14 @@ def ranked(devices):
 
 def missing(device):
     """What the renderer needs and this card's driver does not offer, in the renderer's order."""
-    lacking = [] if device['api'] >= API else [f'Vulkan 1.3 ({version_text(device["api"])})']
+    lacking = [] if device['api'] >= API else [f'Vulkan 1.2 ({version_text(device["api"])})']
     lacking += [name for name in REQUIRED_EXTENSIONS if name not in device['extensions']]
+    if device['api'] < VULKAN_13:
+        lacking += [name for name in VULKAN_12_EXTENSIONS if name not in device['extensions']]
     if 'VK_EXT_robustness2' in device['extensions']:
         lacking += [name for name in REQUIRED_FEATURES if not device['features'].get(name)]
+    if device['api'] >= VULKAN_13 or all(name in device['extensions'] for name in VULKAN_12_EXTENSIONS):
+        lacking += [name for name in VULKAN_12_FEATURES if not device['features'].get(name)]
     return lacking
 
 
@@ -83,7 +91,7 @@ def evaluate(loader, devices, gpu_id=None, adapters=()):
                 return result
         result['device'] = result['devices'][index]
         # Keep the detected card and its missing extensions visible even when the loader itself
-        # is too old. This is diagnostic only: the renderer still requires Vulkan 1.3.
+        # is too old. This is diagnostic only: the renderer requires Vulkan 1.2 plus its KHR compatibility extensions on 1.2 devices.
         result['problem'] = ('loader_version' if loader < API else
                              'device' if result['device']['missing'] else None)
     result['ok'] = result['problem'] is None
@@ -123,6 +131,10 @@ class Robustness2Features(c.Structure):
     _fields_ = [('sType', c.c_uint32), ('pNext', c.c_void_p)] + [(name, c.c_uint32) for name in REQUIRED_FEATURES]
 
 
+class CompatibilityFeature(c.Structure):
+    _fields_ = [('sType', c.c_uint32), ('pNext', c.c_void_p), ('enabled', c.c_uint32)]
+
+
 class Features2(c.Structure):
     _fields_ = [('sType', c.c_uint32), ('pNext', c.c_void_p), ('features', c.c_uint32 * 55)]
 
@@ -137,6 +149,8 @@ class MemoryProperties(c.Structure):
 
 
 FEATURES_2, ROBUSTNESS_2_FEATURES = 1000059000, 1000286000  # VkStructureType
+SYNCHRONIZATION_2_FEATURES = 1000314007
+SHADER_DEMOTE_FEATURES = 1000276000
 DEVICE_LOCAL = 1
 
 
@@ -196,7 +210,17 @@ def query():
                 robustness = Robustness2Features(ROBUSTNESS_2_FEATURES, None)
                 chain = Features2(FEATURES_2, c.cast(c.pointer(robustness), c.c_void_p))
                 vk.vkGetPhysicalDeviceFeatures2(handle, c.byref(chain))
-                features = {name: bool(getattr(robustness, name)) for name in REQUIRED_FEATURES}
+                features.update({name: bool(getattr(robustness, name)) for name in REQUIRED_FEATURES})
+            if api >= VULKAN_13 or all(name in extensions for name in VULKAN_12_EXTENSIONS):
+                demote = CompatibilityFeature(SHADER_DEMOTE_FEATURES, None, 0)
+                synchronization2 = CompatibilityFeature(
+                    SYNCHRONIZATION_2_FEATURES, c.cast(c.pointer(demote), c.c_void_p), 0)
+                chain = Features2(FEATURES_2, c.cast(c.pointer(synchronization2), c.c_void_p))
+                vk.vkGetPhysicalDeviceFeatures2(handle, c.byref(chain))
+                features.update({
+                    'synchronization2': bool(synchronization2.enabled),
+                    'shaderDemoteToHelperInvocation': bool(demote.enabled),
+                })
             devices.append({'name': name, 'api': api, 'type': device_type, 'memory': local,
                             'extensions': extensions, 'features': features, 'vendor': vendor,
                             'device_id': device_id})
