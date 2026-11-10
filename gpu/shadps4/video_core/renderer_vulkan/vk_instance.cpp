@@ -750,13 +750,25 @@ bool Instance::CreateDevice() {
             .bufferDeviceAddress = vk12_features.bufferDeviceAddress,
             .shaderOutputLayer = vk12_features.shaderOutputLayer,
         },
-        vk::PhysicalDeviceVulkan13Features{
+        vk::PhysicalDeviceImageRobustnessFeaturesEXT{
             .robustImageAccess = vk13_features.robustImageAccess,
+        },
+        vk::PhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT{
             .shaderDemoteToHelperInvocation = vk13_features.shaderDemoteToHelperInvocation,
+        },
+        vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT{
             .subgroupSizeControl = vk13_features.subgroupSizeControl,
+        },
+        vk::PhysicalDeviceSynchronization2FeaturesKHR{
             .synchronization2 = vk13_features.synchronization2,
+        },
+        vk::PhysicalDeviceDynamicRenderingFeaturesKHR{
             .dynamicRendering = vk13_features.dynamicRendering,
+        },
+        vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR{
             .shaderIntegerDotProduct = vk13_features.shaderIntegerDotProduct,
+        },
+        vk::PhysicalDeviceMaintenance4FeaturesKHR{
             .maintenance4 = vk13_features.maintenance4,
         },
         vk::PhysicalDeviceMutableDescriptorTypeFeaturesEXT{.mutableDescriptorType = fsr4vk},
@@ -855,6 +867,18 @@ bool Instance::CreateDevice() {
         },
     };
 
+    if (!image_robustness_available) {
+        device_chain.unlink<vk::PhysicalDeviceImageRobustnessFeaturesEXT>();
+    }
+    if (!subgroup_size_control_available) {
+        device_chain.unlink<vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT>();
+    }
+    if (!integer_dot_product_available) {
+        device_chain.unlink<vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR>();
+    }
+    if (!maintenance4_available) {
+        device_chain.unlink<vk::PhysicalDeviceMaintenance4FeaturesKHR>();
+    }
     if (!fsr4vk) {
         device_chain.unlink<vk::PhysicalDeviceMutableDescriptorTypeFeaturesEXT>();
         device_chain.unlink<vk::PhysicalDeviceDescriptorBufferFeaturesEXT>();
@@ -949,6 +973,23 @@ bool Instance::CreateDevice() {
     device = std::move(dev);
 
     VULKAN_HPP_DEFAULT_DISPATCHER.init(*device);
+    if (!is_vulkan_13) {
+        // Vulkan-Hpp's core command wrappers call the 1.3 entry-point names. On a 1.2
+        // device, route those wrappers to the enabled KHR aliases.
+        ASSERT_MSG(VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdBeginRenderingKHR &&
+                       VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdEndRenderingKHR &&
+                       VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdPipelineBarrier2KHR,
+                   "Required Vulkan 1.2 rendering/synchronization entry points are unavailable");
+        VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdBeginRendering =
+            reinterpret_cast<PFN_vkCmdBeginRendering>(
+                VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdBeginRenderingKHR);
+        VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdEndRendering =
+            reinterpret_cast<PFN_vkCmdEndRendering>(
+                VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdEndRenderingKHR);
+        VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdPipelineBarrier2 =
+            reinterpret_cast<PFN_vkCmdPipelineBarrier2>(
+                VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdPipelineBarrier2KHR);
+    }
     LowLatency::Init(*this);
     if (Dlss* dlss = Dlss::Get()) {
         dlss->Initialize(*instance, physical_device, *device);
