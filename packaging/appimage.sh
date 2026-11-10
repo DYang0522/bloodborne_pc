@@ -61,7 +61,7 @@ done
 excluded='^(ld-linux.*|libc|libm|libdl|librt|libpthread|libresolv|libutil|libnsl|libanl|libvulkan|libGL|libGLX|libGLdispatch|libEGL|libOpenGL|libgbm|libdrm.*|libX11|libX11-xcb|libxcb.*|libXau|libXdmcp|libXext|libXfixes|libXrender|libXi|libXcursor|libXrandr|libwayland-.*|libasound|libudev|libpulse.*|libfontconfig|libfreetype|libOpenCL|libva.*|libvdpau|libvpl|libnvidia-.*|libcuda|libz)\.so'
 declare -A seen=()
 bundle() {
-    local elf=$1 line lib name resolved existing
+    local elf=$1 line lib name resolved existing bundle_lib
     [[ -f $elf ]] || return 0
     resolved=$(readlink -f "$elf")
     [[ -n ${seen[$resolved]:-} ]] && return 0
@@ -75,27 +75,40 @@ bundle() {
         [[ -n $lib && -f $lib ]] || continue
         name=$(basename "$lib")
         [[ $name =~ $excluded ]] && continue
+        bundle_lib=$lib
         if [[ $name == "libstdc++.so.6" || $name == "libgcc_s.so.1" || $name == "libssl.so.3" || $name == "libcrypto.so.3" ]]; then
-            # Prefer the Nix runtime libraries used by the compiled GPU/probe binaries.
-            # Ubuntu's GTK/Python stack can expose older copies with the same SONAME;
-            # the Nix closure must win for these backward-compatible runtime libraries.
+            # These ABI-stable runtime libraries must match the Nix-built probe/GPU binaries.
             if [[ $lib == /nix/store/* ]]; then
                 if [[ ! -e "$libdir/$name" ]] || [[ $(readlink -f "$libdir/$name") != "$(readlink -f "$lib")" ]]; then
                     cp -Lf "$lib" "$libdir/$name"
                 fi
-            elif [[ ! -e "$libdir/$name" ]]; then
+                bundle_lib=$lib
+            elif [[ -e "$libdir/$name" ]]; then
+                # Keep the already selected Nix copy and recurse through that copy only.
+                bundle_lib="$libdir/$name"
+            else
+                cp -L "$lib" "$libdir/$name"
+                bundle_lib="$libdir/$name"
+            fi
+        elif [[ $name == "libsystemd.so.0" ]]; then
+            # GTK/Python comes from Ubuntu; keep its matching systemd ABI when the
+            # Nix-built GPU closure exposes another libsystemd with the same SONAME.
+            if [[ ! -e "$libdir/$name" ]]; then
                 cp -L "$lib" "$libdir/$name"
             fi
+            bundle_lib="$libdir/$name"
         elif [[ -e "$libdir/$name" ]]; then
             existing=$(readlink -f "$libdir/$name")
             if [[ $existing != "$(readlink -f "$lib")" ]] && ! cmp -s "$libdir/$name" "$lib"; then
                 echo "Conflicting runtime library name: $name ($existing vs $lib)" >&2
                 return 1
             fi
+            bundle_lib="$libdir/$name"
         else
             cp -L "$lib" "$libdir/$name"
+            bundle_lib="$libdir/$name"
         fi
-        bundle "$lib"
+        bundle "$bundle_lib"
     done < <(ldd "$elf")
 }
 
