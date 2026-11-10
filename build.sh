@@ -24,7 +24,7 @@ MINGW*|MSYS*)
         -DBB_LTO="${BB_LTO:-OFF}" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ >/dev/null
     echo "GPU library and loader: LTO ${BB_LTO:-OFF}"
     # Verify that this CLANG64 compiler can invoke the COFF linker selected for bb-probe.
-    printf 'int main() { return 0; }\\n' > out/linker-probe.cpp
+    echo 'int main() { return 0; }' > out/linker-probe.cpp
     clang++ -fuse-ld=lld --ld-path=lld-link.exe out/linker-probe.cpp -o out/linker-probe.exe
     rm -f out/linker-probe.cpp out/linker-probe.exe
     # Let the workflow's tee capture the complete Ninja output; out/gpu-build.log is
