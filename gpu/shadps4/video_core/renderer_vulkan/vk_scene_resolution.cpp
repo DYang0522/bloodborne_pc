@@ -277,9 +277,10 @@ void SceneTargets::Resample(vk::Image src, vk::Image dst, const VideoCore::Image
                                    .descriptorType = vk::DescriptorType::eSampledImage,
                                    .pImageInfo = &infos[1]},
         };
-        cmd.pushDescriptorSetKHR(vk::PipelineBindPoint::eGraphics, layout, 0,
-                                 vk::ArrayProxy<const vk::WriteDescriptorSet>(
-                                     stencil ? 2u : 1u, writes.data()));
+        const auto descriptor_set = scheduler.AllocateDescriptorSet(
+            *resample_set_layout,
+            std::span<const vk::WriteDescriptorSet>{writes.data(), stencil ? 2u : 1u});
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0, descriptor_set, {});
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
         cmd.setViewportWithCount(vk::Viewport{0.f, 0.f, float(dst_size.width),
                                               float(dst_size.height), 0.f, 1.f});
@@ -320,7 +321,6 @@ void SceneTargets::CreateResampleResources() {
                                        vk::ShaderStageFlagBits::eFragment},
     };
     resample_set_layout = Check(device.createDescriptorSetLayoutUnique({
-        .flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptorKHR,
         .bindingCount = u32(bindings.size()), .pBindings = bindings.data(),
     }));
     const auto set_layout = *resample_set_layout;
