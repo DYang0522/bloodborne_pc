@@ -75,10 +75,10 @@ bundle() {
         [[ -n $lib && -f $lib ]] || continue
         name=$(basename "$lib")
         [[ $name =~ $excluded ]] && continue
-        if [[ $name == "libstdc++.so.6" || $name == "libgcc_s.so.1" ]]; then
-            # Prefer the Nix C++ runtime used by the compiled GPU/probe binaries.
-            # Ubuntu's GTK/Python stack may expose different copies with the same
-            # SONAME; the Nix runtime must win for the Nix-built executable closure.
+        if [[ $name == "libstdc++.so.6" || $name == "libgcc_s.so.1" || $name == "libssl.so.3" || $name == "libcrypto.so.3" ]]; then
+            # Prefer the Nix runtime libraries used by the compiled GPU/probe binaries.
+            # Ubuntu's GTK/Python stack can expose older copies with the same SONAME;
+            # the Nix closure must win for these backward-compatible runtime libraries.
             if [[ $lib == /nix/store/* ]]; then
                 if [[ ! -e "$libdir/$name" ]] || [[ $(readlink -f "$libdir/$name") != "$(readlink -f "$lib")" ]]; then
                     cp -Lf "$lib" "$libdir/$name"
