@@ -28,7 +28,7 @@ MINGW*|MSYS*)
     gpu_build_log="$PWD/out/gpu-build.log"
     : > "$gpu_build_log"
     set +e
-    ninja -v -C out/gpu bb-probe bb-gpu-capabilities bb-fg401-capabilities bb-play >"$gpu_build_log" 2>&1
+    ninja -d keeprsp -v -C out/gpu bb-probe bb-gpu-capabilities bb-fg401-capabilities bb-play >"$gpu_build_log" 2>&1
     gpu_build_status=$?
     set -e
     cat "$gpu_build_log"
