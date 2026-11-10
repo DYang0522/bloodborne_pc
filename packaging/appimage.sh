@@ -20,7 +20,7 @@ mkdir -p "$share/bin/gpu" "$share/launcher" "$share/scripts" "$libdir" "$appdir/
 install -m755 out/bb-probe out/bb-gpu-capabilities "$share/bin/"
 install -m755 out/gpu/libbbgpu.so "$share/bin/gpu/"
 cp run.sh run.py "$share/"
-cp -a scripts patches launcher "$share/"
+cp -a scripts patches launcher "$share/"\nmkdir -p "$share/tools"\ninstall -m644 tools/legacy-cpu-plan.json "$share/tools/legacy-cpu-plan.json"
 find "$share" -type d -name __pycache__ -prune -exec rm -rf {} +
 find "$share" -type f -name '*.pyc' -delete
 
