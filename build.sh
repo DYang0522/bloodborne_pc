@@ -25,7 +25,7 @@ MINGW*|MSYS*)
     echo "GPU library and loader: LTO ${BB_LTO:-OFF}"
     # Capture Ninja output to an absolute path first, then replay it into the Actions log.
     # Avoid a pipeline here: the log must exist even when Ninja exits before producing output.
-    gpu_build_log="$PWD/out/gpu-build.log"
+    gpu_build_log="$PWD/out/gpu-build-text.log"
     : > "$gpu_build_log"
     set +e
     ninja -d keeprsp -v -C out/gpu bb-probe bb-gpu-capabilities bb-fg401-capabilities bb-play >"$gpu_build_log" 2>&1
@@ -36,6 +36,7 @@ MINGW*|MSYS*)
         echo "Build failed with Ninja exit code $gpu_build_status (full log: $gpu_build_log)" >&2
         exit "$gpu_build_status"
     fi
+    rm -f "$PWD/out/gpu-build.log" # LLD reproduction archive is only needed on failure.
     cp out/gpu/bb-probe.exe out/gpu/bb-gpu-capabilities.exe out/gpu/bb-fg401-capabilities.exe out/gpu/bb-play.exe out/
     echo "Built $PWD/out/bb-probe.exe"
     exit 0
