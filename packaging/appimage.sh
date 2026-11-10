@@ -43,7 +43,7 @@ if [[ -d /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0 ]]; then
     mkdir -p "$libdir/gdk-pixbuf-2.0"
     cp -a /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/. "$libdir/gdk-pixbuf-2.0/"
 fi
-install -m644 launcher/logo.png "$appdir/bbport.png"
+install -m644 launcher/bloodborne.png "$appdir/bbport.png"
 install -m644 packaging/linux/bbport.desktop "$appdir/bbport.desktop"
 
 # GTK libraries are loaded by GI typelibs, not necessarily by DT_NEEDED.
