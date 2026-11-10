@@ -22,7 +22,10 @@ import json
 import os
 import sys
 
-API = (1 << 22) | (3 << 12)  # VK_API_VERSION_1_3: the loader and the card need at least this
+API = (1 << 22) | (2 << 12)  # VK_API_VERSION_1_2: the loader and the card need at least this
+VULKAN_12_EXTENSIONS = ('VK_KHR_dynamic_rendering', 'VK_KHR_synchronization2',
+                       'VK_EXT_shader_demote_to_helper_invocation')
+VULKAN_13 = (1 << 22) | (3 << 12)
 REQUIRED_EXTENSIONS = ('VK_KHR_swapchain', 'VK_KHR_push_descriptor', 'VK_EXT_vertex_attribute_divisor',
                        'VK_EXT_robustness2')
 REQUIRED_FEATURES = ('robustBufferAccess2', 'robustImageAccess2', 'nullDescriptor')  # of VK_EXT_robustness2
@@ -36,7 +39,7 @@ def version_text(version):
 
 
 def ranked(devices):
-    """The order vk_instance.cpp picks a card in when BB_GPU_ID is not set: Vulkan 1.3 first, then a
+    """The order vk_instance.cpp picks a card in when BB_GPU_ID is not set: Vulkan 1.2 first, then a
     discrete card, then anything but a software renderer, then the most video memory."""
     return sorted(range(len(devices)), key=lambda i: (devices[i]['api'] < API, devices[i]['type'] != DISCRETE,
                                                       devices[i]['type'] == CPU, -devices[i]['memory']))
@@ -44,8 +47,10 @@ def ranked(devices):
 
 def missing(device):
     """What the renderer needs and this card's driver does not offer, in the renderer's order."""
-    lacking = [] if device['api'] >= API else [f'Vulkan 1.3 ({version_text(device["api"])})']
+    lacking = [] if device['api'] >= API else [f'Vulkan 1.2 ({version_text(device["api"])})']
     lacking += [name for name in REQUIRED_EXTENSIONS if name not in device['extensions']]
+    if device['api'] < VULKAN_13:
+        lacking += [name for name in VULKAN_12_EXTENSIONS if name not in device['extensions']]
     if 'VK_EXT_robustness2' in device['extensions']:
         lacking += [name for name in REQUIRED_FEATURES if not device['features'].get(name)]
     return lacking
@@ -83,7 +88,7 @@ def evaluate(loader, devices, gpu_id=None, adapters=()):
                 return result
         result['device'] = result['devices'][index]
         # Keep the detected card and its missing extensions visible even when the loader itself
-        # is too old. This is diagnostic only: the renderer still requires Vulkan 1.3.
+        # is too old. This is diagnostic only: the renderer requires Vulkan 1.2 plus its KHR compatibility extensions on 1.2 devices.
         result['problem'] = ('loader_version' if loader < API else
                              'device' if result['device']['missing'] else None)
     result['ok'] = result['problem'] is None
