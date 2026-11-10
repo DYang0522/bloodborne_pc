@@ -394,6 +394,22 @@ bool Instance::CreateDevice() {
                VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
     ASSERT_MSG(add_extension(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME),
                "Required Vulkan extension unavailable: {}", VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+    ASSERT_MSG(is_vulkan_13 || add_extension(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME),
+               "Required Vulkan extension unavailable: {}", VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+    ASSERT_MSG(is_vulkan_13 || add_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME),
+               "Required Vulkan extension unavailable: {}", VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    ASSERT_MSG(is_vulkan_13 || add_extension(VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME),
+               "Required Vulkan extension unavailable: {}",
+               VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME);
+
+    // Vulkan 1.3 promoted these extensions to core. On Vulkan 1.2, enable only the
+    // optional aliases actually advertised by the driver.
+    if (!is_vulkan_13) {
+        if (image_robustness_available) add_extension(VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME);
+        if (subgroup_size_control_available) add_extension(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
+        if (integer_dot_product_available) add_extension(VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME);
+        if (maintenance4_available) add_extension(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
+    }
 
     const auto robustness2_features = feature_chain.get<vk::PhysicalDeviceRobustness2FeaturesEXT>();
     ASSERT_MSG(robustness2_features.robustBufferAccess2,
@@ -402,6 +418,13 @@ bool Instance::CreateDevice() {
                "Required Vulkan feature unavailable: robustImageAccess2");
     ASSERT_MSG(robustness2_features.nullDescriptor,
                "Required Vulkan feature unavailable: nullDescriptor");
+    ASSERT_MSG(feature_chain.get<vk::PhysicalDeviceDynamicRenderingFeaturesKHR>().dynamicRendering,
+               "Required Vulkan feature unavailable: dynamicRendering");
+    ASSERT_MSG(feature_chain.get<vk::PhysicalDeviceSynchronization2FeaturesKHR>().synchronization2,
+               "Required Vulkan feature unavailable: synchronization2");
+    ASSERT_MSG(feature_chain.get<vk::PhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT>()
+                   .shaderDemoteToHelperInvocation,
+               "Required Vulkan feature unavailable: shaderDemoteToHelperInvocation");
 
     // Optional
     maintenance_5 = add_extension(VK_KHR_MAINTENANCE_5_EXTENSION_NAME);
@@ -594,7 +617,23 @@ bool Instance::CreateDevice() {
 
     const auto vk11_features = feature_chain.get<vk::PhysicalDeviceVulkan11Features>();
     vk12_features = feature_chain.get<vk::PhysicalDeviceVulkan12Features>();
-    vk13_features = feature_chain.get<vk::PhysicalDeviceVulkan13Features>();
+    vk13_features = {};
+    vk13_features.robustImageAccess =
+        feature_chain.get<vk::PhysicalDeviceImageRobustnessFeaturesEXT>().robustImageAccess;
+    vk13_features.shaderDemoteToHelperInvocation =
+        feature_chain.get<vk::PhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT>()
+            .shaderDemoteToHelperInvocation;
+    vk13_features.subgroupSizeControl =
+        feature_chain.get<vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT>().subgroupSizeControl;
+    vk13_features.synchronization2 =
+        feature_chain.get<vk::PhysicalDeviceSynchronization2FeaturesKHR>().synchronization2;
+    vk13_features.dynamicRendering =
+        feature_chain.get<vk::PhysicalDeviceDynamicRenderingFeaturesKHR>().dynamicRendering;
+    vk13_features.shaderIntegerDotProduct =
+        feature_chain.get<vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR>()
+            .shaderIntegerDotProduct;
+    vk13_features.maintenance4 =
+        feature_chain.get<vk::PhysicalDeviceMaintenance4FeaturesKHR>().maintenance4;
     // bbport: FSR 4.1.1 through the fsr4vk provider DLL (vk_fsr4vk.cpp). Its device requirements
     // (provider/INTEGRATION-CONTRACT.md) are standard features and two extensions; they are
     // requested only when the DLL is installed and the device has all of them, so nothing changes
