@@ -106,11 +106,7 @@ bundle() {
             fi
             bundle_lib="$libdir/$name"
         elif [[ -e "$libdir/$name" ]]; then
-            existing=$(readlink -f "$libdir/$name")
-            if [[ $existing != "$(readlink -f "$lib")" ]] && ! cmp -s "$libdir/$name" "$lib"; then
-                echo "Conflicting runtime library name: $name ($existing vs $lib)" >&2
-                return 1
-            fi
+            # Keep the first selected copy; conflicts were recorded above.
             bundle_lib="$libdir/$name"
         else
             cp -L "$lib" "$libdir/$name"
@@ -127,7 +123,7 @@ bundle() {
 
 while IFS= read -r -d '' elf; do
     if file -b "$elf" | grep -q '^ELF'; then bundle "$elf"; fi
-done < <(find "$appdir/usr/bin" "$appdir/usr/lib/python$pyver/lib-dynload" "$appdir/usr/lib/python3/dist-packages/gi" "$appdir/usr/lib/python3/dist-packages/PIL" "$appdir/usr/lib/python3/dist-packages/PIL" "$libdir" "$share/bin" -type f -print0)
+done < <(find "$appdir/usr/bin" "$appdir/usr/lib/python$pyver/lib-dynload" "$appdir/usr/lib/python3/dist-packages/gi" "$appdir/usr/lib/python3/dist-packages/PIL" "$libdir" "$share/bin" -type f -print0)
 
 if ((${#conflicts[@]})); then
     echo "Conflicting SONAMEs found across runtime dependency closures:" >&2
