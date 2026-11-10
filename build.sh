@@ -8,6 +8,8 @@ case $(uname -s) in
 MINGW*|MSYS*)
     # shellcheck source=msys2-env.sh
     source ./msys2-env.sh
+    set -x
+    echo "[windows-build] entered MSYS2 build branch"
     for tool in clang cmake ninja pkg-config; do
         command -v "$tool" >/dev/null || { echo "Need $tool from MSYS2 CLANG64 (packaging/windows/README.md)." >&2; exit 1; }
     done
