@@ -263,22 +263,22 @@ void SceneTargets::Resample(vk::Image src, vk::Image dst, const VideoCore::Image
     depth_attachment.stencil_clear = stencil_bits;
     depth_attachment.clear_value[1] = 0;
     scheduler.BeginRendering(render_state);
+    const std::array infos{
+        vk::DescriptorImageInfo{{}, depth_view, vk::ImageLayout::eShaderReadOnlyOptimal},
+        vk::DescriptorImageInfo{{}, stencil_view, vk::ImageLayout::eShaderReadOnlyOptimal},
+    };
+    const std::array writes{
+        vk::WriteDescriptorSet{.dstBinding = 0, .descriptorCount = 1,
+                               .descriptorType = vk::DescriptorType::eSampledImage,
+                               .pImageInfo = &infos[0]},
+        vk::WriteDescriptorSet{.dstBinding = 1, .descriptorCount = 1,
+                               .descriptorType = vk::DescriptorType::eSampledImage,
+                               .pImageInfo = &infos[1]},
+    };
+    const auto descriptor_set = scheduler.AllocateDescriptorSet(
+        *resample_set_layout,
+        std::span<const vk::WriteDescriptorSet>{writes.data(), stencil ? 2u : 1u});
     scheduler.Record([=](vk::CommandBuffer cmd) {
-        const std::array infos{
-            vk::DescriptorImageInfo{{}, depth_view, vk::ImageLayout::eShaderReadOnlyOptimal},
-            vk::DescriptorImageInfo{{}, stencil_view, vk::ImageLayout::eShaderReadOnlyOptimal},
-        };
-        const std::array writes{
-            vk::WriteDescriptorSet{.dstBinding = 0, .descriptorCount = 1,
-                                   .descriptorType = vk::DescriptorType::eSampledImage,
-                                   .pImageInfo = &infos[0]},
-            vk::WriteDescriptorSet{.dstBinding = 1, .descriptorCount = 1,
-                                   .descriptorType = vk::DescriptorType::eSampledImage,
-                                   .pImageInfo = &infos[1]},
-        };
-        const auto descriptor_set = scheduler.AllocateDescriptorSet(
-            *resample_set_layout,
-            std::span<const vk::WriteDescriptorSet>{writes.data(), stencil ? 2u : 1u});
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0, descriptor_set, {});
         cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
         cmd.setViewportWithCount(vk::Viewport{0.f, 0.f, float(dst_size.width),
@@ -379,7 +379,7 @@ vk::Pipeline SceneTargets::ResamplePipeline(vk::Format format, bool stencil) {
     const vk::PipelineVertexInputStateCreateInfo vertex_input{};
     const vk::PipelineRasterizationStateCreateInfo raster{.lineWidth = 1.f};
     auto pipeline = Check(instance.GetDevice().createGraphicsPipelineUnique(VK_NULL_HANDLE, {
-        .pNext = &rendering, .stageCount = u32(stages.size()), .pStages = stages.data(),
+        .pNext = nullptr, .stageCount = u32(stages.size()), .pStages = stages.data(),
         .pVertexInputState = &vertex_input, .pInputAssemblyState = &input_assembly,
         .pViewportState = &viewport_info, .pRasterizationState = &raster,
         .pMultisampleState = &multisampling, .pDepthStencilState = &depth_state,
