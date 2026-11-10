@@ -8,6 +8,7 @@
 
 namespace Vulkan {
 class Frame;
+class Scheduler;
 }
 
 namespace Vulkan::HostPasses {
@@ -21,12 +22,13 @@ public:
         u32 sdr_on_hdr = 0; // bbport: SDR swapchain on a display Windows runs in HDR
     };
 
-    void Create(vk::Device device, vk::Format surface_format);
+    void Create(vk::Device device, vk::Format surface_format, Scheduler& scheduler);
 
     void Render(vk::CommandBuffer cmdbuf, vk::ImageView input, vk::Extent2D input_size,
                 Frame& output, Settings settings);
 
 private:
+    Scheduler* scheduler{};
     vk::UniquePipeline pipeline{};
     vk::UniquePipelineLayout pipeline_layout{};
     vk::UniqueDescriptorSetLayout desc_set_layout{};
