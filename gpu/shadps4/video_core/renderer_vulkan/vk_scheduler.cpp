@@ -57,8 +57,7 @@ void Scheduler::SetExecutionQueue(vk::Queue queue) {
 
 Scheduler::Scheduler(const Instance& instance, bool threaded_recording, vk::Queue queue)
     : instance{instance}, execution_queue{queue ? queue : instance.GetGraphicsQueue()},
-      work_semaphore{instance}, command_pool{instance, &work_semaphore},
-      descriptor_heap{instance, &work_semaphore, DescriptorPoolSizes, 2048} {
+      work_semaphore{instance}, command_pool{instance, &work_semaphore} {
     // bbport: BB_VK_RECORD_THREAD=0 records on the calling thread.
     const char* env = std::getenv("BB_VK_RECORD_THREAD");
     if (threaded_recording && !(env && env[0] == '0')) {
@@ -235,7 +234,12 @@ void Scheduler::EndRendering() {
 
 vk::DescriptorSet Scheduler::AllocateDescriptorSet(
     vk::DescriptorSetLayout layout, std::span<const vk::WriteDescriptorSet> writes) {
-    const auto set = descriptor_heap.Commit(layout);
+    std::scoped_lock lock{descriptor_heap_mutex};
+    if (!descriptor_heap) {
+        descriptor_heap = std::make_unique<DescriptorHeap>(instance, &work_semaphore,
+                                                            DescriptorPoolSizes, 2048);
+    }
+    const auto set = descriptor_heap->Commit(layout);
     if (!writes.empty()) {
         std::vector<vk::WriteDescriptorSet> updated(writes.begin(), writes.end());
         for (auto& write : updated) {
