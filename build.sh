@@ -28,9 +28,12 @@ MINGW*|MSYS*)
     # Run Ninja in a separate Windows process so a failing native linker cannot
     # terminate this MSYS2 shell before the COFF response-file fallback runs.
     cat > out/run-ninja.ps1 <<'POWERSHELL'
-param([string]$Ninja, [string]$Root)
 $ErrorActionPreference = 'Stop'
 try {
+    $Ninja = (Get-Command ninja.exe -ErrorAction Stop).Source
+    $Root = (Get-Location).Path
+    Write-Output "[windows-build] PowerShell resolved Ninja: $Ninja"
+    Write-Output "[windows-build] PowerShell working directory: $Root"
     $argsList = @('-d', 'keeprsp', '-v', '-C', 'out/gpu',
                   'bb-probe', 'bb-gpu-capabilities', 'bb-fg401-capabilities', 'bb-play')
     $p = Start-Process -FilePath $Ninja -ArgumentList $argsList -WorkingDirectory $Root -Wait -PassThru -NoNewWindow
@@ -40,36 +43,10 @@ try {
     exit 1
 }
 POWERSHELL
-    echo "[windows-build] resolving native executable paths"
-    echo "[windows-build] PATH=$PATH"
-    echo "[windows-build] ninja command: $(command -v ninja || echo MISSING)"
-    echo "[windows-build] cygpath command: $(command -v cygpath || echo MISSING)"
-    if ! command -v cygpath >/dev/null 2>&1; then
-        echo "MSYS2 cygpath is unavailable; cannot convert Ninja path for native PowerShell." >&2
-        exit 1
-    fi
-    ninja_path="$(command -v ninja)"
-    ninja_exe="$(cygpath -w "$ninja_path")" || {
-        rc=$?
-        echo "Failed to convert Ninja path with cygpath: $ninja_path" >&2
-        exit "$rc"
-    }
-    repo_root="$(pwd -W)" || {
-        rc=$?
-        echo "Failed to resolve Windows working directory with pwd -W" >&2
-        exit "$rc"
-    }
-    echo "[windows-build] native Ninja path => $ninja_exe"
-    echo "[windows-build] native repository path => $repo_root"
-    # MSYS2 filters inherited Windows PATH entries; powershell.exe is not in System32 itself.
-    # Resolve the Windows PowerShell executable explicitly instead of relying on PATH lookup.
-    echo "[windows-build] locating native PowerShell"
-    echo "[windows-build] MSYSTEM=$MSYSTEM WINDIR=${WINDIR:-<unset>}"
-    windows_dir="$(cygpath -u "$(cygpath -W)")"
-    powershell_exe="$windows_dir/System32/WindowsPowerShell/v1.0/powershell.exe"
-    echo "[windows-build] cygpath -W => $windows_dir"
-    echo "[windows-build] PowerShell candidate => $powershell_exe"
-    ls -l "$powershell_exe" || true
+    # GitHub's Windows runner installs Windows PowerShell at this stable system path.
+    # Avoid cygpath here: a failed MSYS path conversion was terminating the build with 127.
+    powershell_exe="/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
+    echo "[windows-build] PowerShell executable => $powershell_exe"
     if [[ ! -f "$powershell_exe" ]]; then
         echo "Windows PowerShell executable does not exist: $powershell_exe" >&2
         exit 1
@@ -81,7 +58,7 @@ POWERSHELL
         exit "$rc"
     }
     echo "[windows-build] launching Ninja wrapper"
-    if ! "$powershell_exe" -NoProfile -ExecutionPolicy Bypass -File out/run-ninja.ps1 "$ninja_exe" "$repo_root"; then
+    if ! "$powershell_exe" -NoProfile -ExecutionPolicy Bypass -File out/run-ninja.ps1; then
         if [[ ! -f "$PWD/out/gpu-build.log" ]]; then
             echo "Ninja failed and LLD did not produce its link reproduction archive." >&2
             exit 1
