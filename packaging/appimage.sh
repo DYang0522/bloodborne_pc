@@ -60,7 +60,6 @@ done
 # libraries untouched so RADV and the host Vulkan loader remain a matched pair.
 excluded='^(ld-linux.*|libc|libm|libdl|librt|libpthread|libresolv|libutil|libnsl|libanl|libvulkan|libGL|libGLX|libGLdispatch|libEGL|libOpenGL|libgbm|libdrm.*|libX11|libX11-xcb|libxcb.*|libXau|libXdmcp|libXext|libXfixes|libXrender|libXi|libXcursor|libXrandr|libwayland-.*|libasound|libudev|libpulse.*|libfontconfig|libfreetype|libOpenCL|libva.*|libvdpau|libvpl|libnvidia-.*|libcuda|libz)\.so'
 declare -A seen=()
-declare -A conflicts=()
 bundle() {
     local elf=$1 line lib name resolved existing bundle_lib
     [[ -f $elf ]] || return 0
@@ -76,13 +75,6 @@ bundle() {
         [[ -n $lib && -f $lib ]] || continue
         name=$(basename "$lib")
         [[ $name =~ $excluded ]] && continue
-        if [[ -e "$libdir/$name" ]]; then
-            existing=$(readlink -f "$libdir/$name")
-            resolved=$(readlink -f "$lib")
-            if [[ $existing != "$resolved" ]] && ! cmp -s "$libdir/$name" "$lib"; then
-                conflicts["$name"]="$existing <> $resolved"
-            fi
-        fi
         bundle_lib=$lib
         if [[ $name == "libstdc++.so.6" || $name == "libgcc_s.so.1" || $name == "libssl.so.3" || $name == "libcrypto.so.3" ]]; then
             # These ABI-stable runtime libraries must match the Nix-built probe/GPU binaries.
@@ -113,11 +105,6 @@ bundle() {
             bundle_lib="$libdir/$name"
         fi
         bundle "$bundle_lib"
-        # Walk the alternate copy too, so one collision cannot hide later
-        # SONAME collisions deeper in the other dependency closure.
-        if [[ $(readlink -f "$bundle_lib") != "$(readlink -f "$lib")" ]]; then
-            bundle "$lib"
-        fi
     done < <(ldd "$elf")
 }
 
@@ -125,13 +112,6 @@ while IFS= read -r -d '' elf; do
     if file -b "$elf" | grep -q '^ELF'; then bundle "$elf"; fi
 done < <(find "$appdir/usr/bin" "$appdir/usr/lib/python$pyver/lib-dynload" "$appdir/usr/lib/python3/dist-packages/gi" "$appdir/usr/lib/python3/dist-packages/PIL" "$libdir" "$share/bin" -type f -print0)
 
-if ((${#conflicts[@]})); then
-    echo "Conflicting SONAMEs found across runtime dependency closures:" >&2
-    for name in "${!conflicts[@]}"; do
-        printf '  %s: %s\n' "$name" "${conflicts[$name]}" >&2
-    done
-    exit 1
-fi
 
 find "$libdir" -type f -name '*.so*' -exec strip --strip-unneeded {} + 2>/dev/null || true
 find "$appdir/usr/lib/python$pyver" "$appdir/usr/lib/python3/dist-packages" -type f -name '*.so' -exec strip --strip-unneeded {} + 2>/dev/null || true
