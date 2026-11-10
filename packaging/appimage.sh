@@ -58,7 +58,106 @@ done
 
 # Copy actual ELF dependencies recursively, while leaving host graphics/display
 # libraries untouched so RADV and the host Vulkan loader remain a matched pair.
-excluded='^(ld-linux.*|libc|libm|libdl|librt|libpthread|libresolv|libutil|libnsl|libanl|libvulkan|libGL|libGLX|libGLdispatch|libEGL|libOpenGL|libgbm|libdrm.*|libX11|libX11-xcb|libxcb.*|libXau|libXdmcp|libXext|libXfixes|libXrender|libXi|libXcursor|libXrandr|libwayland-.*|libasound|libudev|libpulse.*|libfontconfig|libfreetype|libOpenCL|libva.*|libvdpau|libvpl|libnvidia-.*|libcuda|libz)\.so'
+excluded='^(ld-linux.*|libc|libm|libmvec|libdl|librt|libpthread|libresolv|libutil|libnsl|libanl|libvulkan|libGL|libGLX|libGLdispatch|libEGL|libOpenGL|libgbm|libdrm.*|libX11|libX11-xcb|libxcb.*|libXau|libXdmcp|libXext|libXfixes|libXrender|libXi|libXcursor|libXrandr|libwayland-.*|libasound|libudev|libpulse.*|libfontconfig|libfreetype|libOpenCL|libva.*|libvdpau|libvpl|libnvidia-.*|libcuda|libz)\.so(\.[0-9]+)*
+declare -A seen=()
+bundle() {
+    local elf=$1 line lib name resolved existing bundle_lib
+    [[ -f $elf ]] || return 0
+    resolved=$(readlink -f "$elf")
+    [[ -n ${seen[$resolved]:-} ]] && return 0
+    seen[$resolved]=1
+    while IFS= read -r line; do
+        if [[ $line == *"not found"* ]]; then
+            echo "Unresolved dependency of $elf: $line" >&2
+            return 1
+        fi
+        lib=$(awk '/=> \// {print $3} /^\// {print $1}' <<<"$line")
+        [[ -n $lib && -f $lib ]] || continue
+        name=$(basename "$lib")
+        [[ $name =~ $excluded ]] && continue
+        bundle_lib=$lib
+        if [[ $name == "libstdc++.so.6" || $name == "libgcc_s.so.1" || $name == "libssl.so.3" || $name == "libcrypto.so.3" ]]; then
+            # These ABI-stable runtime libraries must match the Nix-built probe/GPU binaries.
+            if [[ $lib == /nix/store/* ]]; then
+                if [[ ! -e "$libdir/$name" ]] || [[ $(readlink -f "$libdir/$name") != "$(readlink -f "$lib")" ]]; then
+                    cp -Lf "$lib" "$libdir/$name"
+                fi
+                bundle_lib=$lib
+            elif [[ -e "$libdir/$name" ]]; then
+                # Keep the already selected Nix copy and recurse through that copy only.
+                bundle_lib="$libdir/$name"
+            else
+                cp -L "$lib" "$libdir/$name"
+                bundle_lib="$libdir/$name"
+            fi
+        elif [[ $name == "libsystemd.so.0" ]]; then
+            # GTK/Python comes from Ubuntu; keep its matching systemd ABI when the
+            # Nix-built GPU closure exposes another libsystemd with the same SONAME.
+            if [[ ! -e "$libdir/$name" ]]; then
+                cp -L "$lib" "$libdir/$name"
+            fi
+            bundle_lib="$libdir/$name"
+        elif [[ -e "$libdir/$name" ]]; then
+            # Keep the first selected copy; conflicts were recorded above.
+            bundle_lib="$libdir/$name"
+        else
+            cp -L "$lib" "$libdir/$name"
+            bundle_lib="$libdir/$name"
+        fi
+        bundle "$bundle_lib"
+    done < <(ldd "$elf")
+}
+
+while IFS= read -r -d '' elf; do
+    if file -b "$elf" | grep -q '^ELF'; then bundle "$elf"; fi
+done < <(find "$appdir/usr/bin" "$appdir/usr/lib/python$pyver/lib-dynload" "$appdir/usr/lib/python3/dist-packages/gi" "$appdir/usr/lib/python3/dist-packages/PIL" "$libdir" "$share/bin" -type f -print0)
+
+
+find "$libdir" -type f -name '*.so*' -exec strip --strip-unneeded {} + 2>/dev/null || true
+find "$appdir/usr/lib/python$pyver" "$appdir/usr/lib/python3/dist-packages" -type f -name '*.so' -exec strip --strip-unneeded {} + 2>/dev/null || true
+
+# Fail the package step if PyGObject cannot load both GTK4 and libadwaita.
+export LD_LIBRARY_PATH="$libdir"
+export PYTHONHOME="$appdir/usr"
+export PYTHONPATH="$appdir/usr/lib/python3/dist-packages"
+export GI_TYPELIB_PATH="$libdir/girepository-1.0"
+export GSETTINGS_SCHEMA_DIR="$appdir/usr/share/glib-2.0/schemas"
+"$appdir/usr/bin/python3" - <<'PY'
+import gi
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Adw, Gtk
+from PIL import Image
+print("GTK", Gtk.get_major_version(), "libadwaita", Adw.get_major_version(), "Pillow", Image.__version__)
+PY
+
+need=$(find "$appdir" -type f \( -name '*.so*' -o -perm -u+x \) -exec objdump -T {} + 2>/dev/null | grep -o 'GLIBC_2\.[0-9.]*' | sed 's/GLIBC_//' | sort -uV | tail -1 || true)
+max_glibc=2.39
+if [[ -n $need && $(printf '%s\n' "$need" "$max_glibc" | sort -V | tail -1) != "$max_glibc" ]]; then
+    echo "Bundle needs glibc $need, newer than $max_glibc; build on Ubuntu 24.04." >&2
+    exit 1
+fi
+echo "Minimum glibc: ${need:-unknown}"
+du -sh "$appdir"
+
+# Keep Steam's injected overlay out of the bundled GTK/Python process.
+cc -O2 -Wall -Werror -static packaging/bbport-entry.c -o "$appdir/AppRun"
+chmod 755 "$appdir/AppRun"
+install -m755 packaging/linux/AppRun.sh "$appdir/AppRun.sh"
+
+tool=${APPIMAGETOOL:-$(command -v appimagetool || true)}
+if [[ -z $tool ]]; then
+    tool=out/appimagetool-x86_64.AppImage
+    [[ -x $tool ]] || {
+        curl -fL -o "$tool" https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+        chmod +x "$tool"
+    }
+fi
+mkdir -p dist
+ARCH=x86_64 "$tool" --appimage-extract-and-run "$appdir" dist/Bloodborne-bbport-x86_64.AppImage.new
+mv -f dist/Bloodborne-bbport-x86_64.AppImage.new dist/Bloodborne-bbport-x86_64.AppImage
+ls -lh dist/Bloodborne-bbport-x86_64.AppImage
+
 declare -A seen=()
 bundle() {
     local elf=$1 line lib name resolved existing bundle_lib
