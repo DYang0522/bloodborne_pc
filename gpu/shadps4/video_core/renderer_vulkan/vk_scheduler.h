@@ -668,9 +668,32 @@ private:
 };
 
 class Scheduler {
+    struct LegacyRenderPassKey {
+        std::array<u32, 8> color_formats{};
+        std::array<u32, 8> color_samples{};
+        std::array<u32, 8> color_layouts{};
+        u16 num_color_attachments{};
+        u32 depth_format{};
+        u32 depth_samples{};
+        u32 depth_layout{};
+        u32 depth_aspects{};
+
+        bool operator==(const LegacyRenderPassKey& other) const noexcept {
+            return color_formats == other.color_formats &&
+                   color_samples == other.color_samples &&
+                   color_layouts == other.color_layouts &&
+                   num_color_attachments == other.num_color_attachments &&
+                   depth_format == other.depth_format && depth_samples == other.depth_samples &&
+                   depth_layout == other.depth_layout && depth_aspects == other.depth_aspects;
+        }
+    };
+    struct CachedLegacyRenderPass {
+        LegacyRenderPassKey key;
+        vk::UniqueRenderPass render_pass;
+    };
     struct LegacyRenderTarget {
         RenderState state;
-        vk::UniqueRenderPass render_pass;
+        vk::RenderPass render_pass;
         vk::UniqueFramebuffer framebuffer;
     };
     struct PendingRenderTargets {
@@ -944,6 +967,7 @@ private:
     std::jthread priority_pending_ops_thread;
     RenderState render_state;
     bool is_rendering = false;
+    std::vector<CachedLegacyRenderPass> render_pass_cache;
     std::vector<LegacyRenderTarget> render_targets;
     std::mutex render_targets_mutex;
     std::deque<PendingRenderTargets> pending_render_targets;
