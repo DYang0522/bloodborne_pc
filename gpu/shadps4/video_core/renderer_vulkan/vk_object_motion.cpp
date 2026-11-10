@@ -281,6 +281,8 @@ void ObjectMotion::Attach(RenderState& state, u32 width, u32 height) {
     attachment = {};
     attachment.image_view = *view;
     attachment.image_layout = vk::ImageLayout::eColorAttachmentOptimal;
+    attachment.format = static_cast<u32>(vk::Format::eR32G32B32A32Sfloat);
+    attachment.samples = static_cast<u32>(vk::SampleCountFlagBits::e1);
     if (!written || image_layout != vk::ImageLayout::eColorAttachmentOptimal) {
         // Clear once per frame; later reads must not erase the validity of this history.
         scheduler.EndRendering();
