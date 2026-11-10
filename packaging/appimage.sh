@@ -69,7 +69,7 @@ bundle() {
             echo "Unresolved dependency of $elf: $line" >&2
             return 1
         fi
-        lib=$(awk '/=> \\// {print $3} /^\\// {print $1}' <<<"$line")
+        lib=$(awk '/=> \// {print $3} /^\// {print $1}' <<<"$line")
         [[ -n $lib && -f $lib ]] || continue
         name=$(basename "$lib")
         [[ $name =~ $excluded ]] && continue
@@ -108,9 +108,9 @@ from PIL import Image
 print("GTK", Gtk.get_major_version(), "libadwaita", Adw.get_major_version(), "Pillow", Image.__version__)
 PY
 
-need=$(find "$appdir" -type f \( -name '*.so*' -o -perm -u+x \) -exec objdump -T {} + 2>/dev/null | grep -o 'GLIBC_2\\.[0-9.]*' | sed 's/GLIBC_//' | sort -uV | tail -1 || true)
+need=$(find "$appdir" -type f \( -name '*.so*' -o -perm -u+x \) -exec objdump -T {} + 2>/dev/null | grep -o 'GLIBC_2\.[0-9.]*' | sed 's/GLIBC_//' | sort -uV | tail -1 || true)
 max_glibc=2.39
-if [[ -n $need && $(printf '%s\\n' "$need" "$max_glibc" | sort -V | tail -1) != "$max_glibc" ]]; then
+if [[ -n $need && $(printf '%s\n' "$need" "$max_glibc" | sort -V | tail -1) != "$max_glibc" ]]; then
     echo "Bundle needs glibc $need, newer than $max_glibc; build on Ubuntu 24.04." >&2
     exit 1
 fi
