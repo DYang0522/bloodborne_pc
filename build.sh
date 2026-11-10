@@ -44,13 +44,24 @@ POWERSHELL
     repo_root="$(cygpath -w "$PWD")"
     # MSYS2 filters inherited Windows PATH entries; powershell.exe is not in System32 itself.
     # Resolve the Windows PowerShell executable explicitly instead of relying on PATH lookup.
-    windows_dir="$(cygpath -u "$(cygpath --windir)")"
+    echo "[windows-build] locating native PowerShell"
+    echo "[windows-build] MSYSTEM=$MSYSTEM WINDIR=${WINDIR:-<unset>}"
+    windows_dir="$(cygpath -u "$(cygpath -W)")"
     powershell_exe="$windows_dir/System32/WindowsPowerShell/v1.0/powershell.exe"
-    if [[ ! -x "$powershell_exe" ]]; then
-        echo "Windows PowerShell not found: $powershell_exe" >&2
+    echo "[windows-build] cygpath -W => $windows_dir"
+    echo "[windows-build] PowerShell candidate => $powershell_exe"
+    ls -l "$powershell_exe" || true
+    if [[ ! -f "$powershell_exe" ]]; then
+        echo "Windows PowerShell executable does not exist: $powershell_exe" >&2
         exit 1
     fi
-    echo "Launching Ninja through $powershell_exe"
+    echo "[windows-build] testing native PowerShell startup"
+    "$powershell_exe" -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' || {
+        rc=$?
+        echo "PowerShell startup failed with exit code $rc" >&2
+        exit "$rc"
+    }
+    echo "[windows-build] launching Ninja wrapper"
     if ! "$powershell_exe" -NoProfile -ExecutionPolicy Bypass -File out/run-ninja.ps1 "$ninja_exe" "$repo_root"; then
         if [[ ! -f "$PWD/out/gpu-build.log" ]]; then
             echo "Ninja failed and LLD did not produce its link reproduction archive." >&2
