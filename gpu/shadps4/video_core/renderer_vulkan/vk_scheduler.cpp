@@ -447,11 +447,14 @@ void Scheduler::Wait(u64 tick) {
 }
 
 void Scheduler::PopPendingOperations() {
-    if (!pending_render_targets.empty()) {
-        work_semaphore.Refresh();
-        while (!pending_render_targets.empty() &&
-               work_semaphore.IsFree(pending_render_targets.front().tick)) {
-            pending_render_targets.pop_front();
+    {
+        std::scoped_lock lk{render_targets_mutex};
+        if (!pending_render_targets.empty()) {
+            work_semaphore.Refresh();
+            while (!pending_render_targets.empty() &&
+                   work_semaphore.IsFree(pending_render_targets.front().tick)) {
+                pending_render_targets.pop_front();
+            }
         }
     }
     if (num_pending_ops.load(std::memory_order_acquire) == 0) {
@@ -566,6 +569,7 @@ void Scheduler::SubmitExecution(SubmitInfo& info) {
     ASSERT_MSG(submit_result != vk::Result::eErrorDeviceLost, "Device lost during submit");
 
     if (!render_targets.empty()) {
+        std::scoped_lock lk{render_targets_mutex};
         pending_render_targets.push_back({signal_value, std::move(render_targets)});
         render_targets.clear();
     }
