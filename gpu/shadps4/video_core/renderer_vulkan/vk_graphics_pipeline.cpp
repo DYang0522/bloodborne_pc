@@ -12,6 +12,7 @@
 #include "video_core/renderer_vulkan/vk_graphics_pipeline.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
+#include "video_core/renderer_vulkan/vk_render_pass.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
 
 namespace Vulkan {
@@ -309,17 +310,23 @@ void GraphicsPipeline::Build(vk::PipelineCache pipeline_cache, const Serializati
             LiverpoolToVK::NumSamples(key.depth_samples, instance.GetDepthSampleCounts()),
     };
 
-    const vk::PipelineRenderingCreateInfo pipeline_rendering_ci = {
-        .pNext = instance.IsMixedDepthSamplesSupported() ? &mixed_samples : nullptr,
-        .colorAttachmentCount = key.num_color_attachments,
-        .pColorAttachmentFormats = color_formats.data(),
-        .depthAttachmentFormat = key.z_format != AmdGpu::DepthBuffer::ZFormat::Invalid
-                                     ? depth_format
-                                     : vk::Format::eUndefined,
-        .stencilAttachmentFormat = key.stencil_format != AmdGpu::DepthBuffer::StencilFormat::Invalid
-                                       ? depth_format
-                                       : vk::Format::eUndefined,
-    };
+    const auto depth_attachment_format =
+        key.z_format != AmdGpu::DepthBuffer::ZFormat::Invalid ||
+                key.stencil_format != AmdGpu::DepthBuffer::StencilFormat::Invalid
+            ? depth_format
+            : vk::Format::eUndefined;
+    const vk::ImageAspectFlags depth_aspects =
+        vk::ImageAspectFlagBits::eDepth |
+        (key.stencil_format != AmdGpu::DepthBuffer::StencilFormat::Invalid
+             ? vk::ImageAspectFlags{vk::ImageAspectFlagBits::eStencil}
+             : vk::ImageAspectFlags{});
+    render_pass = CreateLegacyRenderPass(
+        device, std::span<const vk::Format>{color_formats.data(), key.num_color_attachments},
+        std::span<const vk::SampleCountFlagBits>{color_samples.data(), key.num_color_attachments},
+        depth_attachment_format,
+        LiverpoolToVK::NumSamples(key.depth_samples, instance.GetDepthSampleCounts()), {},
+        vk::ImageLayout::eDepthStencilAttachmentOptimal, depth_aspects,
+        instance.IsMixedDepthSamplesSupported() ? &mixed_samples : nullptr);
 
     std::array<vk::PipelineColorBlendAttachmentState, AmdGpu::NUM_COLOR_BUFFERS> attachments;
     for (u32 i = 0; i < key.num_color_attachments; i++) {
@@ -434,7 +441,7 @@ void GraphicsPipeline::Build(vk::PipelineCache pipeline_cache, const Serializati
     constexpr vk::PipelineDepthStencilStateCreateInfo depth_stencil_info = {};
 
     const vk::GraphicsPipelineCreateInfo pipeline_info = {
-        .pNext = &pipeline_rendering_ci,
+        .pNext = instance.IsMixedDepthSamplesSupported() ? &mixed_samples : nullptr,
         .stageCount = static_cast<u32>(shader_stages.size()),
         .pStages = shader_stages.data(),
         .pVertexInputState = !instance.IsVertexInputDynamicState() ? &vertex_input_info : nullptr,
@@ -448,6 +455,8 @@ void GraphicsPipeline::Build(vk::PipelineCache pipeline_cache, const Serializati
         .pColorBlendState = &color_blending,
         .pDynamicState = &dynamic_info,
         .layout = *pipeline_layout,
+        .renderPass = *render_pass,
+        .subpass = 0,
     };
 
     auto [pipeline_result, pipe] =
