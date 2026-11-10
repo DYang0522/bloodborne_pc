@@ -26,6 +26,22 @@ namespace Vulkan {
 
 std::mutex Scheduler::submit_mutex;
 
+namespace {
+constexpr std::array DescriptorPoolSizes{
+    vk::DescriptorPoolSize{vk::DescriptorType::eSampler, 8192},
+    vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 8192},
+    vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage, 8192},
+    vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage, 8192},
+    vk::DescriptorPoolSize{vk::DescriptorType::eUniformTexelBuffer, 2048},
+    vk::DescriptorPoolSize{vk::DescriptorType::eStorageTexelBuffer, 2048},
+    vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 8192},
+    vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, 8192},
+    vk::DescriptorPoolSize{vk::DescriptorType::eUniformBufferDynamic, 2048},
+    vk::DescriptorPoolSize{vk::DescriptorType::eStorageBufferDynamic, 2048},
+    vk::DescriptorPoolSize{vk::DescriptorType::eInputAttachment, 1024},
+};
+} // namespace
+
 void Scheduler::SetExecutionQueue(vk::Queue queue) {
     if (execution_queue == queue) {
         return;
@@ -38,7 +54,8 @@ void Scheduler::SetExecutionQueue(vk::Queue queue) {
 
 Scheduler::Scheduler(const Instance& instance, bool threaded_recording, vk::Queue queue)
     : instance{instance}, execution_queue{queue ? queue : instance.GetGraphicsQueue()},
-      work_semaphore{instance}, command_pool{instance, &work_semaphore} {
+      work_semaphore{instance}, command_pool{instance, &work_semaphore},
+      descriptor_heap{instance, &work_semaphore, DescriptorPoolSizes, 2048} {
     // bbport: BB_VK_RECORD_THREAD=0 records on the calling thread.
     const char* env = std::getenv("BB_VK_RECORD_THREAD");
     if (threaded_recording && !(env && env[0] == '0')) {
@@ -142,6 +159,19 @@ void Scheduler::EndRendering() {
     }
     is_rendering = false;
     Record([](vk::CommandBuffer cmdbuf) { cmdbuf.endRendering(); });
+}
+
+vk::DescriptorSet Scheduler::AllocateDescriptorSet(
+    vk::DescriptorSetLayout layout, std::span<const vk::WriteDescriptorSet> writes) {
+    const auto set = descriptor_heap.Commit(layout);
+    if (!writes.empty()) {
+        std::vector<vk::WriteDescriptorSet> updated(writes.begin(), writes.end());
+        for (auto& write : updated) {
+            write.dstSet = set;
+        }
+        instance.GetDevice().updateDescriptorSets(updated, {});
+    }
+    return set;
 }
 
 void Scheduler::TraceDirectRecording(void* caller) {
