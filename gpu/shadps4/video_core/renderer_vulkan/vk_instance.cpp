@@ -68,22 +68,33 @@ std::vector<std::string> GetSupportedExtensions(vk::PhysicalDevice physical) {
     return supported_extensions;
 }
 
-vk::FormatProperties3 GetFormatProperties(vk::PhysicalDevice physical, vk::Format format) {
+vk::FormatProperties3 GetFormatProperties(vk::PhysicalDevice physical, vk::Format format,
+                                                   bool supports_format_feature_flags2) {
     vk::FormatProperties3 properties3{};
     vk::FormatProperties2 properties2 = {
-        .pNext = &properties3,
+        .pNext = supports_format_feature_flags2 ? &properties3 : nullptr,
     };
     physical.getFormatProperties2(format, &properties2);
+    if (!supports_format_feature_flags2) {
+        // Vulkan 1.2 without VK_KHR_format_feature_flags2 still exposes the original
+        // 32-bit format flags. They map directly to the low bits of FormatFeatureFlags2.
+        properties3.linearTilingFeatures =
+            static_cast<vk::FormatFeatureFlags2>(properties2.formatProperties.linearTilingFeatures);
+        properties3.optimalTilingFeatures =
+            static_cast<vk::FormatFeatureFlags2>(properties2.formatProperties.optimalTilingFeatures);
+        properties3.bufferFeatures =
+            static_cast<vk::FormatFeatureFlags2>(properties2.formatProperties.bufferFeatures);
+    }
     return properties3;
 }
 
 std::unordered_map<vk::Format, vk::FormatProperties3> GetFormatProperties(
-    vk::PhysicalDevice physical) {
+    vk::PhysicalDevice physical, bool supports_format_feature_flags2) {
     std::unordered_map<vk::Format, vk::FormatProperties3> format_properties;
     for (const auto& format_info : LiverpoolToVK::SurfaceFormats()) {
         const auto format = format_info.vk_format;
         if (!format_properties.contains(format)) {
-            format_properties.emplace(format, GetFormatProperties(physical, format));
+            format_properties.emplace(format, GetFormatProperties(physical, format, supports_format_feature_flags2));
         }
     }
     for (const auto& format_info : LiverpoolToVK::DepthFormats()) {
@@ -194,8 +205,12 @@ Instance::Instance(const Frontend::WindowSystemInfo& window_info, s32 physical_d
     }
 
     available_extensions = GetSupportedExtensions(physical_device);
-    format_properties = GetFormatProperties(physical_device);
     properties = physical_device.getProperties();
+    const bool supports_format_feature_flags2 =
+        properties.apiVersion >= VK_API_VERSION_1_3 ||
+        std::find(available_extensions.begin(), available_extensions.end(),
+                  VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME) != available_extensions.end();
+    format_properties = GetFormatProperties(physical_device, supports_format_feature_flags2);
     memory_properties = physical_device.getMemoryProperties();
     CollectDeviceParameters();
     ASSERT_MSG(properties.apiVersion >= TargetVulkanApiVersion,
