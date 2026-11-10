@@ -59,8 +59,7 @@ def _count_span_tail(site, original, body, image, main, locations, mapped, reloc
     address = site['address']
     spec = COUNT_SPANS.get(address)
     if (site['module'] != 'eboot.bin' or not spec or original.hex() != spec[0]
-            or site['instruction'] != spec[1]
-            or locations['eboot.bin'][2] != COUNT_SPAN_MODULE_SHA256):
+            or site['instruction'] != spec[1]):
         raise ValueError('Legacy CPU count span is outside the closed whitelist.')
     if hashlib.sha256(body).hexdigest() != spec[2]:
         raise ValueError('Legacy CPU count span body is not the reviewed count-only translation.')
@@ -80,9 +79,13 @@ def _count_span_tail(site, original, body, image, main, locations, mapped, reloc
             or span['instruction_lengths'] != [4, len(original) - 4]):
         raise ValueError('Legacy CPU count span sequence/context metadata changed.')
     if (not function_start <= address < address + len(original) <= function_end
-            or not mapped(function_start, function_end - function_start, executable=True)
-            or hashlib.sha256(image[function_start:function_end]).hexdigest() != function_hash):
-        raise ValueError('Legacy CPU count span original function signature does not match.')
+            or not mapped(function_start, function_end - function_start, executable=True)):
+        raise ValueError('Legacy CPU count span original function range is invalid.')
+    if hashlib.sha256(image[function_start:function_end]).hexdigest() != function_hash:
+        # A different game build may move or rewrite this allocator function. Do not transplant
+        # its multi-instruction trampoline on a merely similar byte sequence; leave this site
+        # untranslated and report it, while other byte-verified sites can still be applied.
+        return None
     if site.get('rip_fixups', []) != []:
         raise ValueError('Legacy CPU count spans cannot contain RIP fixups.')
     evidence = span['entry_evidence']
@@ -418,9 +421,12 @@ def patch_image(image, segments, main, modules, relocations, *, plan=None, activ
     for name, (_, _, digest) in locations.items():
         if not isinstance(digest, str) or not re.fullmatch('[0-9a-f]{64}', digest):
             raise ValueError(f'Legacy CPU {name}: source SHA256 is invalid.')
-        if plan['modules'][name] != digest:
-            raise ValueError(f'Legacy CPU {name}: source SHA256 does not match the plan.')
+        planned_digest = plan['modules'][name]
+        if not isinstance(planned_digest, str) or not re.fullmatch('[0-9a-f]{64}', planned_digest):
+            raise ValueError(f'Legacy CPU {name}: planned source SHA256 is invalid.')
     report['source_hashes'] = {name: values[2] for name, values in locations.items()}
+    report['source_hashes_unmatched'] = sorted(
+        name for name, (_, _, digest) in locations.items() if plan['modules'][name] != digest)
     report['plan_sha256'] = hashlib.sha256(raw_plan).hexdigest()
 
     relocation_targets = []
@@ -438,6 +444,7 @@ def patch_image(image, segments, main, modules, relocations, *, plan=None, activ
     operations = []
     span_reports = []
     span_evidence = []
+    skipped_sites = []
     counts = collections.Counter()
     for site in plan['sites']:
         if not isinstance(site, dict) or site.get('module') not in locations:
@@ -472,12 +479,21 @@ def patch_image(image, segments, main, modules, relocations, *, plan=None, activ
         if address + len(original) > size or not mapped(start, len(original), executable=True):
             raise ValueError(f'Legacy CPU {label}: site is outside its executable module segment.')
         if image[start:end] != original:
-            raise ValueError(f'Legacy CPU {label}: original instruction bytes do not match.')
+            # The plan was made from another game build. Never patch bytes that do not match;
+            # skip this site instead of refusing the entire game version.
+            skipped_sites.append(dict(module=name, address=address, instruction=instruction,
+                                      reason='original instruction bytes differ'))
+            continue
         index = bisect.bisect_left(relocation_targets, start - 7)
         if index < len(relocation_targets) and relocation_targets[index] < end:
             raise ValueError(f'Legacy CPU {label}: site overlaps a relocation.')
         if kind == 'count_span':
-            tail, evidence = _count_span_tail(site, original, body, image, main, locations, mapped, relocations)
+            checked = _count_span_tail(site, original, body, image, main, locations, mapped, relocations)
+            if checked is None:
+                skipped_sites.append(dict(module=name, address=address, instruction=instruction,
+                                          reason='enclosing function signature differs'))
+                continue
+            tail, evidence = checked
             body.extend(tail)
             if evidence not in span_evidence:
                 span_evidence.append(evidence)
@@ -535,10 +551,13 @@ def patch_image(image, segments, main, modules, relocations, *, plan=None, activ
                          'this CPU may execute them with incorrect BSR/BSF semantics. '
                          'BB_LEGACY_CPU_ALLOW_PARTIAL=1 (the default) runs them.')
     report.update(patched_sites=len(operations), counts_by_instruction=dict(counts),
-                  trampoline_bytes=cursor - arena, unhandled_count=len(plan['unhandled']),
-                  unhandled_by_reason=dict(collections.Counter(x['reason'] for x in plan['unhandled'])),
-                  unhandled_by_instruction=dict(collections.Counter(x['instruction'].split(' ', 1)[0]
-                                                                        for x in plan['unhandled'])),
+                  trampoline_bytes=cursor - arena, unhandled_count=len(plan['unhandled']) + len(skipped_sites),
+                  unhandled_by_reason=dict(collections.Counter(
+                      [x['reason'] for x in plan['unhandled']] + [x['reason'] for x in skipped_sites])),
+                  unhandled_by_instruction=dict(collections.Counter(
+                      [x['instruction'].split(' ', 1)[0] for x in plan['unhandled']] +
+                      [x['instruction'].split(' ', 1)[0] for x in skipped_sites])),
+                  skipped_sites=skipped_sites,
                   coverage=plan.get('coverage', {}), semantic_risk_sites=semantic_risk,
                   partial_execution_allowed=partial,
                   span_patches=len(span_reports), span_sites=span_reports, spans_experimental=bool(span_reports),
