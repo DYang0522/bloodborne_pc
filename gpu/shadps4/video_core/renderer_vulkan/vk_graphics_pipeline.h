@@ -134,6 +134,7 @@ private:
         SerializationSupport sdata;
         bool clip_discard;
     };
+    vk::UniqueRenderPass render_pass;
     std::unique_ptr<DeferredBuild> deferred_build;
     std::atomic<bool> built{true};
 };
