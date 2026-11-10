@@ -2,17 +2,6 @@ name: Windows package
 
 on:
   workflow_dispatch:
-  push:
-    branches: [windows]
-    paths:
-      - 'gpu/**'
-      - 'src/**'
-      - 'scripts/**'
-      - 'launcher/**'
-      - 'packaging/windows/**'
-      - 'build.sh'
-      - 'msys2-env.sh'
-      - '.github/workflows/windows-package.yml'
 
 permissions:
   contents: read
