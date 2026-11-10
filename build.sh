@@ -42,7 +42,16 @@ try {
 POWERSHELL
     ninja_exe="$(cygpath -w "$(command -v ninja)")"
     repo_root="$(cygpath -w "$PWD")"
-    if ! powershell.exe -NoProfile -ExecutionPolicy Bypass -File out/run-ninja.ps1 "$ninja_exe" "$repo_root"; then
+    # MSYS2 filters inherited Windows PATH entries; powershell.exe is not in System32 itself.
+    # Resolve the Windows PowerShell executable explicitly instead of relying on PATH lookup.
+    windows_dir="$(cygpath -u "$(cygpath --windir)")"
+    powershell_exe="$windows_dir/System32/WindowsPowerShell/v1.0/powershell.exe"
+    if [[ ! -x "$powershell_exe" ]]; then
+        echo "Windows PowerShell not found: $powershell_exe" >&2
+        exit 1
+    fi
+    echo "Launching Ninja through $powershell_exe"
+    if ! "$powershell_exe" -NoProfile -ExecutionPolicy Bypass -File out/run-ninja.ps1 "$ninja_exe" "$repo_root"; then
         if [[ ! -f "$PWD/out/gpu-build.log" ]]; then
             echo "Ninja failed and LLD did not produce its link reproduction archive." >&2
             exit 1
