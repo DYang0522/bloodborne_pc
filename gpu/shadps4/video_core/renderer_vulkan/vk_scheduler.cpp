@@ -99,7 +99,6 @@ void Scheduler::BeginRendering(const RenderState& new_state) {
         std::array<vk::SampleCountFlagBits, 8> color_samples{};
         std::array<vk::ImageLayout, 8> color_layouts{};
         std::vector<vk::ImageView> views;
-        std::vector<vk::ClearAttachment> clears;
         for (u32 i = 0; i < new_state.num_color_attachments; ++i) {
             const auto& attachment = new_state.color_attachments[i];
             color_formats[i] = attachment.image_view
@@ -113,14 +112,6 @@ void Scheduler::BeginRendering(const RenderState& new_state) {
                 continue;
             }
             views.push_back(attachment.image_view);
-            if (attachment.is_clear) {
-                clears.push_back({
-                    .aspectMask = vk::ImageAspectFlagBits::eColor,
-                    .colorAttachment = i,
-                    .clearValue = vk::ClearValue{
-                        .color = vk::ClearColorValue{.uint32 = attachment.clear_value}},
-                });
-            }
         }
 
         const auto& depth = new_state.depth_stencil_attachment;
@@ -141,18 +132,6 @@ void Scheduler::BeginRendering(const RenderState& new_state) {
             views.push_back(depth.image_view);
             if (depth.has_depth) depth_aspects |= vk::ImageAspectFlagBits::eDepth;
             if (depth.has_stencil) depth_aspects |= vk::ImageAspectFlagBits::eStencil;
-            vk::ImageAspectFlags clear_aspects{};
-            if (depth.depth_clear) clear_aspects |= vk::ImageAspectFlagBits::eDepth;
-            if (depth.stencil_clear) clear_aspects |= vk::ImageAspectFlagBits::eStencil;
-            if (clear_aspects) {
-                clears.push_back({
-                    .aspectMask = clear_aspects,
-                    .clearValue = vk::ClearValue{
-                        .depthStencil = vk::ClearDepthStencilValue{
-                            .depth = std::bit_cast<float>(depth.clear_value[0]),
-                            .stencil = depth.clear_value[1]}},
-                });
-            }
         }
 
         const vk::AttachmentSampleCountInfoAMD mixed_samples{
@@ -187,38 +166,36 @@ void Scheduler::BeginRendering(const RenderState& new_state) {
         .baseArrayLayer = 0,
         .layerCount = new_state.num_layers,
     };
+    std::vector<vk::ClearAttachment> clears;
+    for (u32 i = 0; i < new_state.num_color_attachments; ++i) {
+        const auto& attachment = new_state.color_attachments[i];
+        if (attachment.image_view && attachment.is_clear) {
+            clears.push_back({
+                .aspectMask = vk::ImageAspectFlagBits::eColor,
+                .colorAttachment = i,
+                .clearValue = vk::ClearValue{
+                    .color = vk::ClearColorValue{.uint32 = attachment.clear_value}},
+            });
+        }
+    }
+    const auto& depth = new_state.depth_stencil_attachment;
+    if (depth.image_view) {
+        vk::ImageAspectFlags aspects{};
+        if (depth.depth_clear) aspects |= vk::ImageAspectFlagBits::eDepth;
+        if (depth.stencil_clear) aspects |= vk::ImageAspectFlagBits::eStencil;
+        if (aspects) {
+            clears.push_back({
+                .aspectMask = aspects,
+                .clearValue = vk::ClearValue{
+                    .depthStencil = vk::ClearDepthStencilValue{
+                        .depth = std::bit_cast<float>(depth.clear_value[0]),
+                        .stencil = depth.clear_value[1]}},
+            });
+        }
+    }
     is_rendering = true;
     render_state = new_state;
-    Record([begin_info, clear_rect, clears = [&] {
-                std::vector<vk::ClearAttachment> result;
-                for (u32 i = 0; i < new_state.num_color_attachments; ++i) {
-                    const auto& attachment = new_state.color_attachments[i];
-                    if (attachment.image_view && attachment.is_clear) {
-                        result.push_back({
-                            .aspectMask = vk::ImageAspectFlagBits::eColor,
-                            .colorAttachment = i,
-                            .clearValue = vk::ClearValue{
-                                .color = vk::ClearColorValue{.uint32 = attachment.clear_value}},
-                        });
-                    }
-                }
-                const auto& depth = new_state.depth_stencil_attachment;
-                if (depth.image_view) {
-                    vk::ImageAspectFlags aspects{};
-                    if (depth.depth_clear) aspects |= vk::ImageAspectFlagBits::eDepth;
-                    if (depth.stencil_clear) aspects |= vk::ImageAspectFlagBits::eStencil;
-                    if (aspects) {
-                        result.push_back({
-                            .aspectMask = aspects,
-                            .clearValue = vk::ClearValue{
-                                .depthStencil = vk::ClearDepthStencilValue{
-                                    .depth = std::bit_cast<float>(depth.clear_value[0]),
-                                    .stencil = depth.clear_value[1]}},
-                        });
-                    }
-                }
-                return result;
-            }()}](vk::CommandBuffer cmdbuf) {
+    Record([begin_info, clear_rect, clears = std::move(clears)](vk::CommandBuffer cmdbuf) {
         cmdbuf.beginRenderPass(begin_info, vk::SubpassContents::eInline);
         if (!clears.empty()) {
             cmdbuf.clearAttachments(clears, clear_rect);
