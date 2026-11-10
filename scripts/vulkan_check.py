@@ -27,8 +27,8 @@ VULKAN_12_EXTENSIONS = ('VK_KHR_dynamic_rendering', 'VK_KHR_synchronization2',
                        'VK_EXT_shader_demote_to_helper_invocation')
 VULKAN_12_FEATURES = ('dynamicRendering', 'synchronization2', 'shaderDemoteToHelperInvocation')
 VULKAN_13 = (1 << 22) | (3 << 12)
-REQUIRED_EXTENSIONS = ('VK_KHR_swapchain', 'VK_KHR_push_descriptor', 'VK_EXT_vertex_attribute_divisor',
-                       'VK_EXT_robustness2')
+# Push descriptors are optional: the renderer uses ordinary descriptor sets when unavailable.
+REQUIRED_EXTENSIONS = ('VK_KHR_swapchain', 'VK_EXT_vertex_attribute_divisor', 'VK_EXT_robustness2')
 REQUIRED_FEATURES = ('robustBufferAccess2', 'robustImageAccess2', 'nullDescriptor')  # of VK_EXT_robustness2
 DISCRETE, CPU = 2, 4  # VkPhysicalDeviceType
 TYPES = {0: 'other', 1: 'integrated', 2: 'discrete', 3: 'virtual', 4: 'cpu'}
