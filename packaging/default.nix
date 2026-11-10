@@ -12,7 +12,11 @@ let
   # FSR 4.1.1 models are extracted from AMD's DLLs: never in a public package. BB_PACKAGE_FSR411=1
   # (appimage.sh runs nix with --impure) bundles the local fsr4_411 for one's own devices.
   fsr411 = builtins.getEnv "BB_PACKAGE_FSR411" == "1";
-  assetDirs = [ "scripts" "patches" "fsr4_shaders" "launcher" ] ++ lib.optional fsr411 "fsr4_411";
+  # FSR 4 shader assets are downloaded separately and are not in a clean public checkout.
+  # Include them when present (local builds), but do not make CI packaging depend on them.
+  assetDirs = [ "scripts" "patches" "launcher" ]
+    ++ lib.optional (builtins.pathExists (root + "/fsr4_shaders")) "fsr4_shaders"
+    ++ lib.optional fsr411 "fsr4_411";
   # Only what the package needs (the tree also holds builds, profiles and captures).
   wanted = [
     "run.sh" "run.py" "out" "out/bb-probe" "out/bb-gpu-capabilities" "out/gpu" "out/gpu/libbbgpu.so"
