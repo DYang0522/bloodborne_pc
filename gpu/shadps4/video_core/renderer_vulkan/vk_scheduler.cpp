@@ -97,6 +97,8 @@ void Scheduler::BeginRendering(const RenderState& new_state) {
                                       return target.state == new_state;
                                   });
     if (target_it == render_targets.end()) {
+        LegacyRenderPassKey key{};
+        key.num_color_attachments = new_state.num_color_attachments;
         std::array<vk::Format, 8> color_formats{};
         std::array<vk::SampleCountFlagBits, 8> color_samples{};
         std::array<vk::ImageLayout, 8> color_layouts{};
@@ -109,11 +111,15 @@ void Scheduler::BeginRendering(const RenderState& new_state) {
             color_samples[i] = attachment.samples
                                    ? static_cast<vk::SampleCountFlagBits>(attachment.samples)
                                    : vk::SampleCountFlagBits::e1;
-            color_layouts[i] = attachment.image_layout;
-            if (!attachment.image_view || color_formats[i] == vk::Format::eUndefined) {
-                continue;
+            color_layouts[i] = attachment.image_view
+                                   ? attachment.image_layout
+                                   : vk::ImageLayout::eUndefined;
+            key.color_formats[i] = static_cast<u32>(color_formats[i]);
+            key.color_samples[i] = static_cast<u32>(color_samples[i]);
+            key.color_layouts[i] = static_cast<u32>(color_layouts[i]);
+            if (attachment.image_view && color_formats[i] != vk::Format::eUndefined) {
+                views.push_back(attachment.image_view);
             }
-            views.push_back(attachment.image_view);
         }
 
         const auto& depth = new_state.depth_stencil_attachment;
@@ -135,31 +141,45 @@ void Scheduler::BeginRendering(const RenderState& new_state) {
             if (depth.has_depth) depth_aspects |= vk::ImageAspectFlagBits::eDepth;
             if (depth.has_stencil) depth_aspects |= vk::ImageAspectFlagBits::eStencil;
         }
+        key.depth_format = static_cast<u32>(depth_format);
+        key.depth_samples = static_cast<u32>(depth_samples);
+        key.depth_layout = static_cast<u32>(depth_layout);
+        key.depth_aspects = static_cast<u32>(depth_aspects);
 
-        const vk::AttachmentSampleCountInfoAMD mixed_samples{
-            .colorAttachmentCount = new_state.num_color_attachments,
-            .pColorAttachmentSamples = color_samples.data(),
-            .depthStencilAttachmentSamples = depth_samples,
-        };
-        auto render_pass = CreateLegacyRenderPass(
-            instance.GetDevice(),
-            std::span<const vk::Format>{color_formats.data(), new_state.num_color_attachments},
-            std::span<const vk::SampleCountFlagBits>{color_samples.data(),
-                                                      new_state.num_color_attachments},
-            depth_format, depth_samples,
-            std::span<const vk::ImageLayout>{color_layouts.data(), new_state.num_color_attachments},
-            depth_layout, depth_aspects,
-            instance.IsMixedDepthSamplesSupported() ? &mixed_samples : nullptr);
-        auto framebuffer = CreateLegacyFramebuffer(instance.GetDevice(), *render_pass, views,
+        auto pass_it = std::find_if(render_pass_cache.begin(), render_pass_cache.end(),
+                                    [&](const CachedLegacyRenderPass& cached) {
+                                        return cached.key == key;
+                                    });
+        if (pass_it == render_pass_cache.end()) {
+            const vk::AttachmentSampleCountInfoAMD mixed_samples{
+                .colorAttachmentCount = new_state.num_color_attachments,
+                .pColorAttachmentSamples = color_samples.data(),
+                .depthStencilAttachmentSamples = depth_samples,
+            };
+            auto render_pass = CreateLegacyRenderPass(
+                instance.GetDevice(),
+                std::span<const vk::Format>{color_formats.data(), new_state.num_color_attachments},
+                std::span<const vk::SampleCountFlagBits>{color_samples.data(),
+                                                          new_state.num_color_attachments},
+                depth_format, depth_samples,
+                std::span<const vk::ImageLayout>{color_layouts.data(),
+                                                  new_state.num_color_attachments},
+                depth_layout, depth_aspects,
+                instance.IsMixedDepthSamplesSupported() ? &mixed_samples : nullptr);
+            render_pass_cache.push_back({key, std::move(render_pass)});
+            pass_it = std::prev(render_pass_cache.end());
+        }
+        const auto render_pass = *pass_it->render_pass;
+        auto framebuffer = CreateLegacyFramebuffer(instance.GetDevice(), render_pass, views,
                                                     new_state.width, new_state.height,
                                                     new_state.num_layers);
-        render_targets.push_back(
-            LegacyRenderTarget{new_state, std::move(render_pass), std::move(framebuffer)});
+        render_targets.push_back(LegacyRenderTarget{new_state, render_pass,
+                                                    std::move(framebuffer)});
         target_it = std::prev(render_targets.end());
     }
 
     const vk::RenderPassBeginInfo begin_info{
-        .renderPass = *target_it->render_pass,
+        .renderPass = target_it->render_pass,
         .framebuffer = *target_it->framebuffer,
         .renderArea = {{0, 0}, {new_state.width, new_state.height}},
     };
