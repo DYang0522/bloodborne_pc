@@ -83,7 +83,9 @@ int main(int argc, char **argv) {
     const VkApplicationInfo app = {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
         .pApplicationName = "bbport scene scaling probe",
-        .apiVersion = VK_API_VERSION_1_3,
+        /* Inventory/live-scaling probe: Vulkan 1.2 is enough to enumerate legacy cards.
+         * The game renderer separately enforces its Vulkan 1.3 requirements. */
+        .apiVersion = VK_API_VERSION_1_2,
     };
     const VkInstanceCreateInfo create = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
