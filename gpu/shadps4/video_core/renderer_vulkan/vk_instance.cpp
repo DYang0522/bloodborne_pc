@@ -653,7 +653,7 @@ bool Instance::CreateDevice() {
     const bool query_failed = missing_fsr4vk_feature &&
         !std::strcmp(missing_fsr4vk_feature, "Vulkan extension query");
     fsr4vk_status = fsr4vk ? 0 : fsr4vk_enabled && fsr4vk_enabled[0] == '0' ? 6 :
-        missing_fsr4vk_feature && !query_failed ? 2 : !fsr4vk_files ? 4 : 5;
+        !fsr4vk_files ? 4 : missing_fsr4vk_feature && !query_failed ? 2 : 5;
     if (!native_requested && !fsr4vk) {
         if (const char* enabled = std::getenv("BB_FSR4VK"); enabled && enabled[0] == '0')
             fsr411_problem = "Vulkan (fsr4vk): disabled by BB_FSR4VK=0";
