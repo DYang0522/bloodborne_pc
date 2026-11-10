@@ -19,7 +19,7 @@ let
     ++ lib.optional fsr411 "fsr4_411";
   # Only what the package needs (the tree also holds builds, profiles and captures).
   wanted = [
-    "run.sh" "run.py" "out" "out/bb-probe" "out/bb-gpu-capabilities" "out/gpu" "out/gpu/libbbgpu.so"
+    "run.sh" "run.py" "tools/legacy-cpu-plan.json" "out" "out/bb-probe" "out/bb-gpu-capabilities" "out/gpu" "out/gpu/libbbgpu.so"
   ] ++ assetDirs;
   src = builtins.path {
     name = "bbport-src";
@@ -84,7 +84,7 @@ pkgs.stdenv.mkDerivation {
     d=$out/share/bbport
     mkdir -p $d/bin $out/bin
     cp run.sh run.py $d/ # scripts/linux_start.py uses run.py's start steps
-    cp -r scripts patches launcher $d/
+    cp -r scripts patches launcher $d/\n    mkdir -p $d/tools\n    install -m644 tools/legacy-cpu-plan.json $d/tools/legacy-cpu-plan.json
     # FSR 4 shader assets are optional and may be absent in CI or clean public checkouts.
     if [ -d fsr4_shaders ]; then
       cp -r fsr4_shaders $d/
