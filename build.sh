@@ -23,13 +23,34 @@ MINGW*|MSYS*)
     cmake -S gpu -B out/gpu -G Ninja -DCMAKE_BUILD_TYPE=Release -DBB_PGO=off \
         -DBB_LTO="${BB_LTO:-OFF}" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ >/dev/null
     echo "GPU library and loader: LTO ${BB_LTO:-OFF}"
-    # Verify that this CLANG64 compiler can invoke the COFF linker selected for bb-probe.
-    echo 'int main() { return 0; }' > out/linker-probe.cpp
-    clang++ -fuse-ld=lld --ld-path=lld-link.exe out/linker-probe.cpp -o out/linker-probe.exe
-    rm -f out/linker-probe.cpp out/linker-probe.exe
-    # Let the workflow's tee capture the complete Ninja output; out/gpu-build.log is
-    # reserved for LLD's --reproduce archive if the final bb-probe link fails.
-    ninja -d keeprsp -v -C out/gpu bb-probe bb-gpu-capabilities bb-fg401-capabilities bb-play
+    # The fallback below invokes the COFF linker directly from LLD's response archive.
+    command -v lld-link.exe >/dev/null || { echo "Need lld-link.exe from MSYS2 CLANG64." >&2; exit 1; }
+    # Let the workflow's tee capture the complete Ninja output. If the MinGW LLD
+    # driver fails on the final bb-probe link, use its exact COFF response archive
+    # with lld-link directly (the response archive contains every input and option).
+    if ! ninja -d keeprsp -v -C out/gpu bb-probe bb-gpu-capabilities bb-fg401-capabilities bb-play; then
+        if [[ ! -f "$PWD/out/gpu-build.log" ]]; then
+            echo "Ninja failed and LLD did not produce its link reproduction archive." >&2
+            exit 1
+        fi
+        rm -rf out/link-repro
+        mkdir -p out/link-repro
+        tar -xf out/gpu-build.log -C out/link-repro
+        (
+            cd out/link-repro/gpu-build
+            lld-link.exe @response.txt
+        )
+        cp out/link-repro/gpu-build/bb-probe.exe out/gpu/bb-probe.exe
+        cp out/link-repro/gpu-build/libbb-probe.dll.a out/gpu/libbb-probe.dll.a
+        rm -rf out/link-repro
+        rm -f "$PWD/out/gpu-build.log"
+        for exe in bb-probe.exe bb-gpu-capabilities.exe bb-fg401-capabilities.exe bb-play.exe; do
+            if [[ ! -f "out/gpu/$exe" ]]; then
+                ninja -d keeprsp -v -C out/gpu bb-probe bb-gpu-capabilities bb-fg401-capabilities bb-play
+                break
+            fi
+        done
+    fi
     rm -f "$PWD/out/gpu-build.log" # LLD reproduction archive is only needed on failure.
     cp out/gpu/bb-probe.exe out/gpu/bb-gpu-capabilities.exe out/gpu/bb-fg401-capabilities.exe out/gpu/bb-play.exe out/
     echo "Built $PWD/out/bb-probe.exe"
