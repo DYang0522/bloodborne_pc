@@ -263,8 +263,8 @@ def partial_allowed():
 def patch_libc(module):
     if not enabled():
         return []
-    if module['sha256'] != LIBC_SHA256:
-        raise ValueError('Legacy CPU profile expects the inspected libc dump; its SHA256 changed.')
+    # Do not pin the entire libc module to one game dump. The unique strlen symbol and
+    # its exact BMI1 instruction signature below are the safety checks for this local patch.
     matches = [symbol for symbol in module['symbols'] if symbol['section'] and symbol['type'] == 2
                and symbol['name'].split('#')[0] == nid('strlen')]
     if len(matches) != 1:
