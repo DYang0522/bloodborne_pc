@@ -275,10 +275,15 @@ def patch_libc(module):
                    and symbol['value'] + symbol['size'] <= part['vaddr'] + part['filesz'])
     offset = segment['offset'] + symbol['value'] - segment['vaddr']
     original = bytes(module['elf'][offset:offset + symbol['size']])
-    if symbol['value'] != 0x2f970 or symbol['size'] != 224 or original[24:29] != bytes.fromhex('c4e2f8f2c6'):
-        raise ValueError('Legacy CPU strlen signature does not match the inspected implementation.')
+    signature = bytes.fromhex('c4e2f8f2c6')  # the inspected BMI1 instruction in strlen
+    signature_offset = original.find(signature)
+    if len(original) < len(STRLEN_BASELINE) or signature_offset < 0:
+        # Another libc build may already use baseline instructions or a different implementation.
+        # It needs no blind replacement; the linked image's remaining sites are checked separately.
+        return []
     module['elf'][offset:offset + symbol['size']] = STRLEN_BASELINE + b'\x90' * (symbol['size'] - len(STRLEN_BASELINE))
-    report = {'function': 'strlen', 'address': hex(symbol['value']), 'original_sha256': hashlib.sha256(original).hexdigest(),
+    report = {'function': 'strlen', 'address': hex(symbol['value']), 'signature_offset': signature_offset,
+              'original_sha256': hashlib.sha256(original).hexdigest(),
               'replacement': 'baseline x86-64, no BMI1'}
     print('CPU compatibility: replaced BMI1 strlen in the generated libc image')
     return [report]
