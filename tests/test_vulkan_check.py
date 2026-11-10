@@ -17,7 +17,7 @@ V11, V12, V13, V14 = (1 << 22) | (1 << 12), V.API, V.VULKAN_13, (1 << 22) | (4 <
 def card(name='Card', api=V13, kind=V.DISCRETE, memory=8 << 30, extensions=V.REQUIRED_EXTENSIONS, features=None,
          vendor=None, device_id=None):
     return {'name': name, 'api': api, 'type': kind, 'memory': memory, 'extensions': set(extensions),
-            'features': dict.fromkeys(V.REQUIRED_FEATURES, True) if features is None else features,
+            'features': dict.fromkeys((*V.REQUIRED_FEATURES, *V.VULKAN_12_FEATURES), True) if features is None else features,
             'vendor': vendor, 'device_id': device_id}
 
 
