@@ -93,8 +93,6 @@ class ApplyImageTests(unittest.TestCase):
 
     def test_reject_hash_signature_address_length_and_plan_defects(self):
         mutations = [
-            lambda d: d['main'].update(sha256='b' * 64),
-            lambda d: d['image'].__setitem__(32, 0),
             lambda d: d['plan'].update(version=999),
             lambda d: d['plan'].update(version=True),
             lambda d: d['plan'].pop('unhandled'),
@@ -119,6 +117,21 @@ class ApplyImageTests(unittest.TestCase):
                 data = fixture()
                 mutate(data)
                 self.reject(data)
+
+    def test_source_hash_mismatch_is_reported_and_changed_site_is_skipped(self):
+        data = fixture()
+        data['main']['sha256'] = 'b' * 64
+        image, _, report = cpu_compat.patch_image(**data)
+        self.assertEqual(report['patched_sites'], 1)
+        self.assertEqual(report['source_hashes_unmatched'], ['eboot.bin'])
+
+        data = fixture()
+        data['image'][32] = 0
+        image, _, report = cpu_compat.patch_image(**data)
+        self.assertEqual(report['patched_sites'], 0)
+        self.assertEqual(len(report['skipped_sites']), 1)
+        self.assertEqual(report['skipped_sites'][0]['reason'], 'original instruction bytes differ')
+        self.assertEqual(image[32], 0)
 
     def test_relocation_next_to_site_is_preserved(self):
         data = fixture()
