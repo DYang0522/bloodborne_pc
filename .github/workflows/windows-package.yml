@@ -20,6 +20,10 @@ jobs:
         with:
           python-version: '3.14'
 
+      - name: Test Vulkan compatibility detection
+        shell: pwsh
+        run: python -m unittest discover -s tests -p "test_vulkan_check.py" -v
+
       - name: Export Windows Python path
         shell: pwsh
         run: |
