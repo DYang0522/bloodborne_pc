@@ -95,5 +95,8 @@ jobs:
             dist/fsr4vk-v0.4.3-amdfix-src.zip
             build-windows.log
             package-windows.log
+            out/gpu-build.log
+            out/gpu/CMakeCache.txt
+            out/gpu/build.ninja
           if-no-files-found: warn
           retention-days: 14
