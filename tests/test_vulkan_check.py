@@ -67,6 +67,12 @@ class VerdictTests(unittest.TestCase):
         self.assertTrue(result['ok'])
         self.assertEqual(result['device']['missing'], [])
 
+    def test_push_descriptor_is_optional(self):
+        extensions = set(V.REQUIRED_EXTENSIONS) - {'VK_KHR_push_descriptor'}
+        result = V.evaluate(V12, [card(api=V12, extensions=(*extensions, *V.VULKAN_12_EXTENSIONS))])
+        self.assertTrue(result['ok'])
+        self.assertNotIn('VK_KHR_push_descriptor', result['device']['missing'])
+
     def test_no_driver_or_an_old_loader(self):
         self.assertEqual(V.evaluate(None, [])['problem'], 'loader')
         self.assertEqual(V.evaluate(V11, [])['problem'], 'loader_version')
@@ -90,9 +96,8 @@ class VerdictTests(unittest.TestCase):
         old = card('Old card', api=V12, extensions=['VK_KHR_swapchain'])
         result = V.evaluate(V13, [old])
         self.assertEqual(result['problem'], 'device')
-        self.assertEqual(result['device']['missing'], ['VK_KHR_push_descriptor',
-                                                       'VK_EXT_vertex_attribute_divisor', 'VK_EXT_robustness2',
-                                                       *V.VULKAN_12_EXTENSIONS])
+        self.assertEqual(result['device']['missing'], ['VK_EXT_vertex_attribute_divisor',
+                                                       'VK_EXT_robustness2', *V.VULKAN_12_EXTENSIONS])
         partial = card(features={'robustBufferAccess2': True, 'robustImageAccess2': True, 'nullDescriptor': False,
                                  **dict.fromkeys(V.VULKAN_12_FEATURES, True)})
         self.assertEqual(V.evaluate(V13, [partial])['device']['missing'], ['nullDescriptor'])
