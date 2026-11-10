@@ -88,9 +88,9 @@ class VerdictTests(unittest.TestCase):
     def test_missing_vulkan_12_compatibility_feature_is_named(self):
         extensions = (*V.REQUIRED_EXTENSIONS, *V.VULKAN_12_EXTENSIONS)
         features = dict.fromkeys((*V.REQUIRED_FEATURES, *V.VULKAN_12_FEATURES), True)
-        features['dynamicRendering'] = False
+        features['synchronization2'] = False
         result = V.evaluate(V12, [card(api=V12, extensions=extensions, features=features)])
-        self.assertEqual(result['device']['missing'], ['dynamicRendering'])
+        self.assertEqual(result['device']['missing'], ['synchronization2'])
 
     def test_what_a_card_lacks_is_named(self):
         old = card('Old card', api=V12, extensions=['VK_KHR_swapchain'])
