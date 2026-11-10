@@ -746,7 +746,10 @@ class AllocatorSpanTests(unittest.TestCase):
         data = self.fixture()
         data['image'] = self.translated
         data['segments'] = self.segments
-        self.reject(data)
+        with patch.dict(os.environ, {'BB_LEGACY_CPU_ALLOW_PARTIAL': '1'}):
+            _, _, report = cpu_compat.patch_image(**data)
+        self.assertEqual(report['span_patches'], 0)
+        self.assertEqual(len(report['skipped_sites']), 4)
 
     def test_entries_unknown_candidates_and_resolved_relocations_reject(self):
         for site_index, site in enumerate(self.sites):
