@@ -71,7 +71,7 @@ def configure(env, manifest_dirs=MANIFEST_DIRS, library_dirs=LIBRARY_DIRS):
     if not found:
         if bundled:
             env["VK_DRIVER_FILES"] = bundled
-        return "Vulkan: bundled AMD/Intel drivers; no accessible NVIDIA ICD found"
+        return "Vulkan: using host AMD/Intel ICDs; no accessible NVIDIA ICD found"
 
     data, driver = found
     # The driver version/path and mtime give each installed driver its own small
