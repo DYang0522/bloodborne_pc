@@ -315,6 +315,11 @@ bool Instance::CreateDevice() {
         is_vulkan_13 || supports_extension(VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME);
     const bool maintenance4_available =
         is_vulkan_13 || supports_extension(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
+    // VK_KHR_push_descriptor is optional: pipelines already fall back to ordinary
+    // descriptor-set allocation and updates when maxPushDescriptors is zero.
+    const bool push_descriptor_available =
+        properties.apiVersion >= VK_API_VERSION_1_4 ||
+        supports_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
     const bool format_feature_flags2_available =
         is_vulkan_13 || supports_extension(VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME);
 
@@ -374,6 +379,9 @@ bool Instance::CreateDevice() {
     if (!maintenance4_available) {
         properties_chain.unlink<vk::PhysicalDeviceMaintenance4PropertiesKHR>();
     }
+    if (!push_descriptor_available) {
+        properties_chain.unlink<vk::PhysicalDevicePushDescriptorPropertiesKHR>();
+    }
     vk11_props = properties_chain.get<vk::PhysicalDeviceVulkan11Properties>();
     vk12_props = properties_chain.get<vk::PhysicalDeviceVulkan12Properties>();
     vk13_props = {};
@@ -381,7 +389,9 @@ bool Instance::CreateDevice() {
         properties_chain.get<vk::PhysicalDeviceSubgroupSizeControlPropertiesEXT>().maxSubgroupSize;
     vk13_props.maxBufferSize =
         properties_chain.get<vk::PhysicalDeviceMaintenance4PropertiesKHR>().maxBufferSize;
-    push_descriptor_props = properties_chain.get<vk::PhysicalDevicePushDescriptorPropertiesKHR>();
+    push_descriptor_props = push_descriptor_available
+                                 ? properties_chain.get<vk::PhysicalDevicePushDescriptorPropertiesKHR>()
+                                 : vk::PhysicalDevicePushDescriptorPropertiesKHR{};
     LOG_INFO(Render_Vulkan, "Physical device subgroup size {}", vk11_props.subgroupSize);
 
     if (available_extensions.empty()) {
@@ -408,8 +418,13 @@ bool Instance::CreateDevice() {
     // Required
     ASSERT_MSG(add_extension(VK_KHR_SWAPCHAIN_EXTENSION_NAME),
                "Required Vulkan extension unavailable: {}", VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-    ASSERT_MSG(add_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME),
-               "Required Vulkan extension unavailable: {}", VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+    if (supports_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME)) {
+        add_extension(VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME);
+    }
+    if (!push_descriptor_available) {
+        LOG_INFO(Render_Vulkan,
+                 "VK_KHR_push_descriptor unavailable; using ordinary descriptor-set updates");
+    }
     ASSERT_MSG(add_extension(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME),
                "Required Vulkan extension unavailable: {}",
                VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
