@@ -23,9 +23,9 @@ import os
 import sys
 
 API = (1 << 22) | (2 << 12)  # VK_API_VERSION_1_2: the loader and the card need at least this
-VULKAN_12_EXTENSIONS = ('VK_KHR_dynamic_rendering', 'VK_KHR_synchronization2',
+VULKAN_12_EXTENSIONS = ('VK_KHR_synchronization2',
                        'VK_EXT_shader_demote_to_helper_invocation')
-VULKAN_12_FEATURES = ('dynamicRendering', 'synchronization2', 'shaderDemoteToHelperInvocation')
+VULKAN_12_FEATURES = ('synchronization2', 'shaderDemoteToHelperInvocation')
 VULKAN_13 = (1 << 22) | (3 << 12)
 # Push descriptors are optional: the renderer uses ordinary descriptor sets when unavailable.
 REQUIRED_EXTENSIONS = ('VK_KHR_swapchain', 'VK_EXT_vertex_attribute_divisor', 'VK_EXT_robustness2')
@@ -149,7 +149,7 @@ class MemoryProperties(c.Structure):
 
 
 FEATURES_2, ROBUSTNESS_2_FEATURES = 1000059000, 1000286000  # VkStructureType
-DYNAMIC_RENDERING_FEATURES, SYNCHRONIZATION_2_FEATURES = 1000044003, 1000314007
+SYNCHRONIZATION_2_FEATURES = 1000314007
 SHADER_DEMOTE_FEATURES = 1000276000
 DEVICE_LOCAL = 1
 
@@ -215,12 +215,9 @@ def query():
                 demote = CompatibilityFeature(SHADER_DEMOTE_FEATURES, None, 0)
                 synchronization2 = CompatibilityFeature(
                     SYNCHRONIZATION_2_FEATURES, c.cast(c.pointer(demote), c.c_void_p), 0)
-                dynamic_rendering = CompatibilityFeature(
-                    DYNAMIC_RENDERING_FEATURES, c.cast(c.pointer(synchronization2), c.c_void_p), 0)
-                chain = Features2(FEATURES_2, c.cast(c.pointer(dynamic_rendering), c.c_void_p))
+                chain = Features2(FEATURES_2, c.cast(c.pointer(synchronization2), c.c_void_p))
                 vk.vkGetPhysicalDeviceFeatures2(handle, c.byref(chain))
                 features.update({
-                    'dynamicRendering': bool(dynamic_rendering.enabled),
                     'synchronization2': bool(synchronization2.enabled),
                     'shaderDemoteToHelperInvocation': bool(demote.enabled),
                 })
