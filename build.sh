@@ -40,8 +40,27 @@ try {
     exit 1
 }
 POWERSHELL
-    ninja_exe="$(cygpath -w "$(command -v ninja)")"
-    repo_root="$(cygpath -w "$PWD")"
+    echo "[windows-build] resolving native executable paths"
+    echo "[windows-build] PATH=$PATH"
+    echo "[windows-build] ninja command: $(command -v ninja || echo MISSING)"
+    echo "[windows-build] cygpath command: $(command -v cygpath || echo MISSING)"
+    if ! command -v cygpath >/dev/null 2>&1; then
+        echo "MSYS2 cygpath is unavailable; cannot convert Ninja path for native PowerShell." >&2
+        exit 1
+    fi
+    ninja_path="$(command -v ninja)"
+    ninja_exe="$(cygpath -w "$ninja_path")" || {
+        rc=$?
+        echo "Failed to convert Ninja path with cygpath: $ninja_path" >&2
+        exit "$rc"
+    }
+    repo_root="$(pwd -W)" || {
+        rc=$?
+        echo "Failed to resolve Windows working directory with pwd -W" >&2
+        exit "$rc"
+    }
+    echo "[windows-build] native Ninja path => $ninja_exe"
+    echo "[windows-build] native repository path => $repo_root"
     # MSYS2 filters inherited Windows PATH entries; powershell.exe is not in System32 itself.
     # Resolve the Windows PowerShell executable explicitly instead of relying on PATH lookup.
     echo "[windows-build] locating native PowerShell"
