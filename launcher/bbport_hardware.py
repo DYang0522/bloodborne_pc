@@ -7,7 +7,7 @@ card, per processor generation and the memory size give a tier from "Not support
 launcher fills them in by itself: the graphics card from bb-gpu-capabilities.exe (Vulkan), the
 processor from the registry and CPUID, the memory from Windows. It is a rough guide from the
 requirements and the developer's measurements (RX 7800 XT), not a benchmark. "Not supported" is
-kept for what stops the port: no Vulkan 1.3, a card far too slow, a processor without AVX. Too
+kept for what stops the port: no compatible Vulkan 1.2 driver, a card far too slow, a processor without AVX. Too
 little RAM or video memory is "Below minimum": players run the game with 8 GB and on 3 GB cards.
 
 Texts are English; `tr` translates a template before it is formatted.
@@ -871,7 +871,7 @@ REQUIREMENTS = [
     ('OS', 'Windows 10 or 11, 64-bit', 'Windows 11, 64-bit'),
     ('CPU', 'Intel Core i3-10100 or AMD Ryzen 3 3100', 'AMD Ryzen 7 5700X or Intel Core i7-12700'),
     ('RAM', '16 GB', '32 GB'),
-    ('GPU', '4 GB of video memory with Vulkan 1.3 (GTX 1050 Ti, GTX 1650, RX 570, RX 6500 XT)',
+    ('GPU', '4 GB of video memory with Vulkan 1.2 compatibility (GTX 1050 Ti, GTX 1650, RX 570, RX 6500 XT)',
      '8 GB of video memory or more (RTX 3060 Ti, RTX 4060, RX 6700 XT, RX 7600)'),
     ('Storage', 'About 35 GB for your game files plus 1 GB for the port; an SSD is recommended', 'SSD'),
 ]
