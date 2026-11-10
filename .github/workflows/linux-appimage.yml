@@ -1,0 +1,51 @@
+name: Linux AppImage
+
+on:
+  push:
+    branches: [linux-r9-290x]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-appimage-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Update nixpkgs channel
+        run: |
+          nix-channel --add https://nixos.org/channels/nixpkgs-unstable nixpkgs
+          nix-channel --update
+
+      - name: Prepare optional shader directory
+        run: mkdir -p fsr4_shaders
+
+      - name: Hardware-check tests
+        run: PYTHONPATH=tests:scripts python3 tests/test_launcher_hardware.py
+
+      - name: Build Linux game and run native tests
+        run: bash build.sh --test
+
+      - name: Build AppImage
+        run: nix-shell shell.nix --run "bash packaging/appimage.sh"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bloodborne-bbport-x86_64.AppImage
+          path: dist/Bloodborne-bbport-x86_64.AppImage
+          if-no-files-found: error
