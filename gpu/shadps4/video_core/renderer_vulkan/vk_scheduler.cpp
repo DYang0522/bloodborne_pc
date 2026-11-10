@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <thread>
+#include <bit>
+#include <iterator>
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
