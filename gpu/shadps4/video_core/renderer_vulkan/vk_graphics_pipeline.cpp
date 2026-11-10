@@ -315,11 +315,13 @@ void GraphicsPipeline::Build(vk::PipelineCache pipeline_cache, const Serializati
                 key.stencil_format != AmdGpu::DepthBuffer::StencilFormat::Invalid
             ? depth_format
             : vk::Format::eUndefined;
-    const vk::ImageAspectFlags depth_aspects =
-        vk::ImageAspectFlagBits::eDepth |
-        (key.stencil_format != AmdGpu::DepthBuffer::StencilFormat::Invalid
-             ? vk::ImageAspectFlags{vk::ImageAspectFlagBits::eStencil}
-             : vk::ImageAspectFlags{});
+    vk::ImageAspectFlags depth_aspects{};
+    if (key.z_format != AmdGpu::DepthBuffer::ZFormat::Invalid) {
+        depth_aspects |= vk::ImageAspectFlagBits::eDepth;
+    }
+    if (key.stencil_format != AmdGpu::DepthBuffer::StencilFormat::Invalid) {
+        depth_aspects |= vk::ImageAspectFlagBits::eStencil;
+    }
     render_pass = CreateLegacyRenderPass(
         device, std::span<const vk::Format>{color_formats.data(), key.num_color_attachments},
         std::span<const vk::SampleCountFlagBits>{color_samples.data(), key.num_color_attachments},
