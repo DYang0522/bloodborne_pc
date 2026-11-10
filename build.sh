@@ -25,10 +25,24 @@ MINGW*|MSYS*)
     echo "GPU library and loader: LTO ${BB_LTO:-OFF}"
     # The fallback below invokes the COFF linker directly from LLD's response archive.
     command -v lld-link.exe >/dev/null || { echo "Need lld-link.exe from MSYS2 CLANG64." >&2; exit 1; }
-    # Let the workflow's tee capture the complete Ninja output. If the MinGW LLD
-    # driver fails on the final bb-probe link, use its exact COFF response archive
-    # with lld-link directly (the response archive contains every input and option).
-    if ! ninja -d keeprsp -v -C out/gpu bb-probe bb-gpu-capabilities bb-fg401-capabilities bb-play; then
+    # Run Ninja in a separate Windows process so a failing native linker cannot
+    # terminate this MSYS2 shell before the COFF response-file fallback runs.
+    cat > out/run-ninja.ps1 <<'POWERSHELL'
+param([string]$Ninja, [string]$Root)
+$ErrorActionPreference = 'Stop'
+try {
+    $argsList = @('-d', 'keeprsp', '-v', '-C', 'out/gpu',
+                  'bb-probe', 'bb-gpu-capabilities', 'bb-fg401-capabilities', 'bb-play')
+    $p = Start-Process -FilePath $Ninja -ArgumentList $argsList -WorkingDirectory $Root -Wait -PassThru -NoNewWindow
+    exit [int]$p.ExitCode
+} catch {
+    Write-Error $_
+    exit 1
+}
+POWERSHELL
+    ninja_exe="$(cygpath -w "$(command -v ninja)")"
+    repo_root="$(cygpath -w "$PWD")"
+    if ! powershell.exe -NoProfile -ExecutionPolicy Bypass -File out/run-ninja.ps1 "$ninja_exe" "$repo_root"; then
         if [[ ! -f "$PWD/out/gpu-build.log" ]]; then
             echo "Ninja failed and LLD did not produce its link reproduction archive." >&2
             exit 1
@@ -52,6 +66,7 @@ MINGW*|MSYS*)
         done
     fi
     rm -f "$PWD/out/gpu-build.log" # LLD reproduction archive is only needed on failure.
+    rm -f out/run-ninja.ps1
     cp out/gpu/bb-probe.exe out/gpu/bb-gpu-capabilities.exe out/gpu/bb-fg401-capabilities.exe out/gpu/bb-play.exe out/
     echo "Built $PWD/out/bb-probe.exe"
     exit 0
