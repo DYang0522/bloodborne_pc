@@ -25,7 +25,7 @@ MINGW*|MSYS*)
     echo "GPU library and loader: LTO ${BB_LTO:-OFF}"
     # Verify that this CLANG64 compiler can invoke the COFF linker selected for bb-probe.
     printf 'int main() { return 0; }\\n' > out/linker-probe.cpp
-    clang++ -fuse-ld=lld-link out/linker-probe.cpp -o out/linker-probe.exe
+    clang++ -fuse-ld=lld --ld-path=lld-link.exe out/linker-probe.cpp -o out/linker-probe.exe
     rm -f out/linker-probe.cpp out/linker-probe.exe
     # Let the workflow's tee capture the complete Ninja output; out/gpu-build.log is
     # reserved for LLD's --reproduce archive if the final bb-probe link fails.
