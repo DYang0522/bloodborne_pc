@@ -978,7 +978,8 @@ bool Instance::CreateDevice() {
         // device, route those wrappers to the enabled KHR aliases.
         ASSERT_MSG(VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdBeginRenderingKHR &&
                        VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdEndRenderingKHR &&
-                       VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdPipelineBarrier2KHR,
+                       VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdPipelineBarrier2KHR &&
+                       VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdWriteTimestamp2KHR,
                    "Required Vulkan 1.2 rendering/synchronization entry points are unavailable");
         VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdBeginRendering =
             reinterpret_cast<PFN_vkCmdBeginRendering>(
@@ -989,6 +990,9 @@ bool Instance::CreateDevice() {
         VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdPipelineBarrier2 =
             reinterpret_cast<PFN_vkCmdPipelineBarrier2>(
                 VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdPipelineBarrier2KHR);
+        VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdWriteTimestamp2 =
+            reinterpret_cast<PFN_vkCmdWriteTimestamp2>(
+                VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdWriteTimestamp2KHR);
     }
     LowLatency::Init(*this);
     if (Dlss* dlss = Dlss::Get()) {
