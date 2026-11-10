@@ -387,6 +387,7 @@ vk::Pipeline SceneTargets::ResamplePipeline(vk::Format format, bool stencil) {
         .layout = *resample_layout, .renderPass = *render_pass, .subpass = 0,
     }));
     const auto result = *pipeline;
+    resample_render_passes.push_back(std::move(render_pass));
     resample_pipelines.emplace_back(key, std::move(pipeline));
     return result;
 }
