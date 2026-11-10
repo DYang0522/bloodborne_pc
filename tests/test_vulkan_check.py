@@ -42,11 +42,15 @@ class RendererListTests(unittest.TestCase):
         self.assertEqual([plain(m) for m in macros], [plain(n) for n in V.REQUIRED_EXTENSIONS])
         features = re.findall(r'ASSERT_MSG\(robustness2_features\.(\w+),', instance)
         self.assertEqual(tuple(features), V.REQUIRED_FEATURES)
-        # Nothing else the renderer calls required that the check does not know about.
-        self.assertTrue(all(name in instance for name in V.VULKAN_12_EXTENSIONS))
+        compatibility_macros = re.findall(
+            r'ASSERT_MSG\(is_vulkan_13 \|\| add_extension\((VK_\w+)_EXTENSION_NAME\)', instance)
+        self.assertEqual([plain(m) for m in compatibility_macros],
+                         [plain(n.upper()) for n in V.VULKAN_12_EXTENSIONS])
+        self.assertTrue(all(f'Required Vulkan feature unavailable: {name}' in instance
+                            for name in V.VULKAN_12_FEATURES))
         self.assertEqual(len(re.findall(r'"Required Vulkan (?:extension|feature) unavailable', instance)),
                          len(V.REQUIRED_EXTENSIONS) + len(V.VULKAN_12_EXTENSIONS) +
-                         len(V.REQUIRED_FEATURES) + 3)
+                         len(V.REQUIRED_FEATURES) + len(V.VULKAN_12_FEATURES))
 
     def test_the_same_choice_of_card_as_the_renderer(self):
         instance = (RENDERER / 'vk_instance.cpp').read_text(encoding='utf-8')
