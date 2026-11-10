@@ -945,6 +945,7 @@ private:
     RenderState render_state;
     bool is_rendering = false;
     std::vector<LegacyRenderTarget> render_targets;
+    std::mutex render_targets_mutex;
     std::deque<PendingRenderTargets> pending_render_targets;
     // bbport: threaded recording
     std::unique_ptr<RecordChunk> record_chunk;
