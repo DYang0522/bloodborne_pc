@@ -1,5 +1,5 @@
 # Packaged port: the prebuilt game binaries (build.sh first), the start-up scripts and the GTK4
-# launcher, with their whole Nix closure and Mesa's Vulkan drivers. `bash packaging/appimage.sh`
+# launcher, with the required Nix runtime closure; Vulkan loader and drivers come from the host. `bash packaging/appimage.sh`
 # turns it into an AppImage (Steam Deck); `nix-build packaging` alone gives result/bin/bbport.
 { pkgs ? import <nixpkgs> { }
   # Store paths the prebuilt binaries load libraries from (their RUNPATHs), written by
