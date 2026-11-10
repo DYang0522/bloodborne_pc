@@ -30,7 +30,7 @@ namespace Vulkan {
 std::mutex Scheduler::submit_mutex;
 
 namespace {
-constexpr std::array DescriptorPoolSizes{
+const std::array DescriptorPoolSizes{
     vk::DescriptorPoolSize{vk::DescriptorType::eSampler, 8192},
     vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 8192},
     vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage, 8192},
