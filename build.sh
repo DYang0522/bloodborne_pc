@@ -29,22 +29,23 @@ MINGW*|MSYS*)
     command -v lld-link.exe >/dev/null || { echo "Need lld-link.exe from MSYS2 CLANG64." >&2; exit 1; }
     # Run Ninja in a separate Windows process so a failing native linker cannot
     # terminate this MSYS2 shell before the COFF response-file fallback runs.
-    cat > out/run-ninja.ps1 <<'POWERSHELL'
-$ErrorActionPreference = 'Stop'
-try {
-    $Ninja = (Get-Command ninja.exe -ErrorAction Stop).Source
-    $Root = (Get-Location).Path
-    Write-Output "[windows-build] PowerShell resolved Ninja: $Ninja"
-    Write-Output "[windows-build] PowerShell working directory: $Root"
-    $argsList = @('-d', 'keeprsp', '-v', '-C', 'out/gpu',
-                  'bb-probe', 'bb-gpu-capabilities', 'bb-fg401-capabilities', 'bb-play')
-    $p = Start-Process -FilePath $Ninja -ArgumentList $argsList -WorkingDirectory $Root -Wait -PassThru -NoNewWindow
-    exit [int]$p.ExitCode
-} catch {
-    Write-Error $_
-    exit 1
-}
-POWERSHELL
+    {
+        printf '%s\n' \
+            '$ErrorActionPreference = "Stop"' \
+            'try {' \
+            '    $Ninja = (Get-Command ninja.exe -ErrorAction Stop).Source' \
+            '    $Root = (Get-Location).Path' \
+            '    Write-Output "[windows-build] PowerShell resolved Ninja: $Ninja"' \
+            '    Write-Output "[windows-build] PowerShell working directory: $Root"' \
+            '    $argsList = @("-d", "keeprsp", "-v", "-C", "out/gpu",' \
+            '                  "bb-probe", "bb-gpu-capabilities", "bb-fg401-capabilities", "bb-play")' \
+            '    $p = Start-Process -FilePath $Ninja -ArgumentList $argsList -WorkingDirectory $Root -Wait -PassThru -NoNewWindow' \
+            '    exit [int]$p.ExitCode' \
+            '} catch {' \
+            '    Write-Error $_' \
+            '    exit 1' \
+            '}'
+    } > out/run-ninja.ps1
     # GitHub's Windows runner installs Windows PowerShell at this stable system path.
     # Avoid cygpath here: a failed MSYS path conversion was terminating the build with 127.
     powershell_exe="/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
