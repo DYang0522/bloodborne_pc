@@ -277,9 +277,35 @@ std::string Instance::GetDriverVersionName() {
 }
 
 bool Instance::CreateDevice() {
-    const vk::StructureChain feature_chain = physical_device.getFeatures2<
+    const bool is_vulkan_13 = properties.apiVersion >= VK_API_VERSION_1_3;
+    const auto supports_extension = [&](std::string_view extension) {
+        return std::find(available_extensions.begin(), available_extensions.end(), extension) !=
+               available_extensions.end();
+    };
+    const bool image_robustness_available =
+        is_vulkan_13 || supports_extension(VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME);
+    const bool shader_demote_available =
+        is_vulkan_13 || supports_extension(VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME);
+    const bool subgroup_size_control_available =
+        is_vulkan_13 || supports_extension(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
+    const bool synchronization2_available =
+        is_vulkan_13 || supports_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+    const bool dynamic_rendering_available =
+        is_vulkan_13 || supports_extension(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+    const bool integer_dot_product_available =
+        is_vulkan_13 || supports_extension(VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME);
+    const bool maintenance4_available =
+        is_vulkan_13 || supports_extension(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
+
+    auto feature_chain = physical_device.getFeatures2<
         vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features,
-        vk::PhysicalDeviceVulkan12Features, vk::PhysicalDeviceVulkan13Features,
+        vk::PhysicalDeviceVulkan12Features, vk::PhysicalDeviceImageRobustnessFeaturesEXT,
+        vk::PhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT,
+        vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT,
+        vk::PhysicalDeviceSynchronization2FeaturesKHR,
+        vk::PhysicalDeviceDynamicRenderingFeaturesKHR,
+        vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR,
+        vk::PhysicalDeviceMaintenance4FeaturesKHR,
         vk::PhysicalDeviceRobustness2FeaturesEXT,
         vk::PhysicalDeviceExtendedDynamicState3FeaturesEXT,
         vk::PhysicalDevicePrimitiveTopologyListRestartFeaturesEXT,
@@ -292,15 +318,48 @@ bool Instance::CreateDevice() {
         vk::PhysicalDeviceDescriptorBufferFeaturesEXT,
         vk::PhysicalDeviceFaultFeaturesEXT, vk::PhysicalDevicePresentIdFeaturesKHR,
         vk::PhysicalDeviceAntiLagFeaturesAMD>();
+    if (!image_robustness_available) {
+        feature_chain.unlink<vk::PhysicalDeviceImageRobustnessFeaturesEXT>();
+    }
+    if (!shader_demote_available) {
+        feature_chain.unlink<vk::PhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT>();
+    }
+    if (!subgroup_size_control_available) {
+        feature_chain.unlink<vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT>();
+    }
+    if (!synchronization2_available) {
+        feature_chain.unlink<vk::PhysicalDeviceSynchronization2FeaturesKHR>();
+    }
+    if (!dynamic_rendering_available) {
+        feature_chain.unlink<vk::PhysicalDeviceDynamicRenderingFeaturesKHR>();
+    }
+    if (!integer_dot_product_available) {
+        feature_chain.unlink<vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR>();
+    }
+    if (!maintenance4_available) {
+        feature_chain.unlink<vk::PhysicalDeviceMaintenance4FeaturesKHR>();
+    }
     features = feature_chain.get().features;
 
-    const vk::StructureChain properties_chain = physical_device.getProperties2<
+    auto properties_chain = physical_device.getProperties2<
         vk::PhysicalDeviceProperties2, vk::PhysicalDeviceVulkan11Properties,
-        vk::PhysicalDeviceVulkan12Properties, vk::PhysicalDeviceVulkan13Properties,
+        vk::PhysicalDeviceVulkan12Properties,
+        vk::PhysicalDeviceSubgroupSizeControlPropertiesEXT,
+        vk::PhysicalDeviceMaintenance4PropertiesKHR,
         vk::PhysicalDevicePushDescriptorPropertiesKHR>();
+    if (!subgroup_size_control_available) {
+        properties_chain.unlink<vk::PhysicalDeviceSubgroupSizeControlPropertiesEXT>();
+    }
+    if (!maintenance4_available) {
+        properties_chain.unlink<vk::PhysicalDeviceMaintenance4PropertiesKHR>();
+    }
     vk11_props = properties_chain.get<vk::PhysicalDeviceVulkan11Properties>();
     vk12_props = properties_chain.get<vk::PhysicalDeviceVulkan12Properties>();
-    vk13_props = properties_chain.get<vk::PhysicalDeviceVulkan13Properties>();
+    vk13_props = {};
+    vk13_props.maxSubgroupSize =
+        properties_chain.get<vk::PhysicalDeviceSubgroupSizeControlPropertiesEXT>().maxSubgroupSize;
+    vk13_props.maxBufferSize =
+        properties_chain.get<vk::PhysicalDeviceMaintenance4PropertiesKHR>().maxBufferSize;
     push_descriptor_props = properties_chain.get<vk::PhysicalDevicePushDescriptorPropertiesKHR>();
     LOG_INFO(Render_Vulkan, "Physical device subgroup size {}", vk11_props.subgroupSize);
 
