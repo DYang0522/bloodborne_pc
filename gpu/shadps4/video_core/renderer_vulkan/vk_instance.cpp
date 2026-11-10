@@ -79,11 +79,11 @@ vk::FormatProperties3 GetFormatProperties(vk::PhysicalDevice physical, vk::Forma
         // Vulkan 1.2 without VK_KHR_format_feature_flags2 still exposes the original
         // 32-bit format flags. They map directly to the low bits of FormatFeatureFlags2.
         properties3.linearTilingFeatures =
-            static_cast<vk::FormatFeatureFlags2>(properties2.formatProperties.linearTilingFeatures);
+            vk::FormatFeatureFlags2{static_cast<VkFormatFeatureFlags2>(static_cast<VkFormatFeatureFlags>(properties2.formatProperties.linearTilingFeatures))};
         properties3.optimalTilingFeatures =
-            static_cast<vk::FormatFeatureFlags2>(properties2.formatProperties.optimalTilingFeatures);
+            vk::FormatFeatureFlags2{static_cast<VkFormatFeatureFlags2>(static_cast<VkFormatFeatureFlags>(properties2.formatProperties.optimalTilingFeatures))};
         properties3.bufferFeatures =
-            static_cast<vk::FormatFeatureFlags2>(properties2.formatProperties.bufferFeatures);
+            vk::FormatFeatureFlags2{static_cast<VkFormatFeatureFlags2>(static_cast<VkFormatFeatureFlags>(properties2.formatProperties.bufferFeatures))};
     }
     return properties3;
 }
@@ -100,7 +100,7 @@ std::unordered_map<vk::Format, vk::FormatProperties3> GetFormatProperties(
     for (const auto& format_info : LiverpoolToVK::DepthFormats()) {
         const auto format = format_info.vk_format;
         if (!format_properties.contains(format)) {
-            format_properties.emplace(format, GetFormatProperties(physical, format));
+            format_properties.emplace(format, GetFormatProperties(physical, format, supports_format_feature_flags2));
         }
     }
     // Other miscellaneous formats, e.g. for color buffers, swizzles, or compatibility
@@ -112,7 +112,7 @@ std::unordered_map<vk::Format, vk::FormatProperties3> GetFormatProperties(
     };
     for (const auto& format : misc_formats) {
         if (!format_properties.contains(format)) {
-            format_properties.emplace(format, GetFormatProperties(physical, format));
+            format_properties.emplace(format, GetFormatProperties(physical, format, supports_format_feature_flags2));
         }
     }
     return format_properties;
@@ -311,6 +311,8 @@ bool Instance::CreateDevice() {
         is_vulkan_13 || supports_extension(VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME);
     const bool maintenance4_available =
         is_vulkan_13 || supports_extension(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
+    const bool format_feature_flags2_available =
+        is_vulkan_13 || supports_extension(VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME);
 
     auto feature_chain = physical_device.getFeatures2<
         vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features,
@@ -424,6 +426,7 @@ bool Instance::CreateDevice() {
         if (subgroup_size_control_available) add_extension(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
         if (integer_dot_product_available) add_extension(VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME);
         if (maintenance4_available) add_extension(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
+        if (format_feature_flags2_available) add_extension(VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME);
     }
 
     const auto robustness2_features = feature_chain.get<vk::PhysicalDeviceRobustness2FeaturesEXT>();
