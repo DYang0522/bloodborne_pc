@@ -223,7 +223,7 @@ class ThisPcTests(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform == 'win32', "Windows' own list of cards")
     @unittest.skipIf(os.environ.get('GITHUB_ACTIONS') == 'true',
-                     'GitHub-hosted runners expose a software adapter, not a player's graphics card')
+                     "GitHub-hosted runners expose a software adapter, not a player's graphics card")
     def test_windows_lists_its_cards(self):
         adapters = V.windows_adapters()
         self.assertNotIn('Microsoft Basic Render Driver', [a['name'] for a in adapters])  # its software renderer
