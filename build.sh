@@ -23,11 +23,18 @@ MINGW*|MSYS*)
     cmake -S gpu -B out/gpu -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBB_PGO=off \
         -DBB_LTO="${BB_LTO:-OFF}" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ >/dev/null
     echo "GPU library and loader: LTO ${BB_LTO:-OFF}"
-    # Stream verbose Ninja output into the Actions log as well as saving it locally.
-    # This keeps the failing compiler command visible even if the build wrapper exits early.
-    if ! ninja -v -C out/gpu bb-probe bb-gpu-capabilities bb-fg401-capabilities bb-play 2>&1 | tee out/gpu-build.log; then
-        echo 'Build failed (full log: out/gpu-build.log)' >&2
-        exit 1
+    # Capture Ninja output to an absolute path first, then replay it into the Actions log.
+    # Avoid a pipeline here: the log must exist even when Ninja exits before producing output.
+    gpu_build_log="$PWD/out/gpu-build.log"
+    : > "$gpu_build_log"
+    set +e
+    ninja -v -C out/gpu bb-probe bb-gpu-capabilities bb-fg401-capabilities bb-play >"$gpu_build_log" 2>&1
+    gpu_build_status=$?
+    set -e
+    cat "$gpu_build_log"
+    if (( gpu_build_status != 0 )); then
+        echo "Build failed with Ninja exit code $gpu_build_status (full log: $gpu_build_log)" >&2
+        exit "$gpu_build_status"
     fi
     cp out/gpu/bb-probe.exe out/gpu/bb-gpu-capabilities.exe out/gpu/bb-fg401-capabilities.exe out/gpu/bb-play.exe out/
     echo "Built $PWD/out/bb-probe.exe"
