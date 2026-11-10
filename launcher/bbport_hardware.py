@@ -15,7 +15,7 @@ Texts are English; `tr` translates a template before it is formatted.
 import ctypes
 import re
 
-# (vendor, group, name, video memory in GB, score, flags); flags: laptop, igpu, no-vulkan13.
+# (vendor, group, name, video memory in GB, score, flags); flags: laptop, igpu, no-vulkan13, vulkan12.
 GPUS = [
     ('nvidia', 'NVIDIA GeForce', 'RTX 5090', 32, 430, ''),
     ('nvidia', 'NVIDIA GeForce', 'RTX 5080', 16, 300, ''),
@@ -145,7 +145,7 @@ GPUS = [
     ('amd', 'AMD Radeon', 'RX 560', 4, 32, ''),
     ('amd', 'AMD Radeon', 'RX 550', 2, 20, ''),
     ('amd', 'AMD Radeon', 'R9 390 / 390X', 8, 60, 'no-vulkan13'),
-    ('amd', 'AMD Radeon', 'R9 290 / 290X', 4, 52, 'no-vulkan13'),
+    ('amd', 'AMD Radeon', 'R9 290 / 290X', 4, 52, 'no-vulkan13 vulkan12'),
     ('amd', 'AMD Radeon', 'R9 380 / 285', 4, 42, 'no-vulkan13'),
     ('amd', 'AMD Radeon', 'R9 280 / 280X / HD 7970', 3, 40, 'no-vulkan13'),
     ('amd', 'AMD Radeon (laptop)', 'RX 7600M XT', 8, 110, 'laptop'),
@@ -187,7 +187,10 @@ class Gpu:
     def __init__(self, vendor, group, name, vram, score, flags=''):
         self.vendor, self.group, self.name, self.vram, self.score = vendor, group, name, vram, score
         flags = flags.split()
-        self.laptop, self.igpu, self.vulkan13 = 'laptop' in flags, 'igpu' in flags, 'no-vulkan13' not in flags
+        self.laptop, self.igpu = 'laptop' in flags, 'igpu' in flags
+        # The compatibility renderer supports Vulkan 1.2. Some cards marked no-vulkan13
+        # can still use it; vulkan12 explicitly records that known exception.
+        self.vulkan12 = 'vulkan12' in flags or 'no-vulkan13' not in flags
         rtx = re.search(r'RTX (\d)0', name)
         series = int(rtx.group(1)) * 10 if rtx else 0
         self.dlss = vendor == 'nvidia' and series >= 20
@@ -473,7 +476,7 @@ RESOLUTIONS = ('1080p', '1440p', '4K')
 
 
 def gpu_tier(g):
-    if not g.vulkan13 or g.score < 25:
+    if not g.vulkan12 or g.score < 25:
         return 0
     # Under 4 GB of video memory is below the minimum, not a stop: a player's GTX 1060 3 GB played up
     # to the Blood-Starved Beast. The launcher gives such a card the settings for 4 GB cards.
@@ -583,8 +586,8 @@ def assess(g, cpu, ram, tr=str):
             text += ' ' + tr('Laptop processor: counted lower than the desktop chip of its generation '
                              '(it holds lower clocks under long load).')
         checks.append((('bad', 'warn', 'ok', 'ok', 'ok')[tiers['cpu']], 'cpu', text))
-    if not g.vulkan13:
-        checks.append(('bad', 'gpu', tr('Not supported: no Vulkan 1.3 driver for this card.')))
+    if not g.vulkan12:
+        checks.append(('bad', 'gpu', tr('Not supported: no compatible Vulkan 1.2 driver for this card.')))
     else:  # under 4 GB of video memory reads "Below the minimum" like a slow card (gpu_tier)
         text = tr(('Too slow for the port.', 'Below the minimum (GTX 1050 Ti / GTX 1650 / RX 570).',
                    'Meets the minimum (GTX 1050 Ti / GTX 1650 / RX 570 / RX 6500 XT).', 'Above the minimum.',
