@@ -156,6 +156,13 @@ class PlayersPcTests(unittest.TestCase):
                          ('1920x1080', 'fsr3', '3', '30'))
         self.assertEqual(settings['model_lod'], '1')
 
+    def test_r9_290x_with_vulkan_1_3_is_not_blocked(self):
+        r = rate_detected('AMD Radeon R9 290X', 4, 'AMD Ryzen 7 5800X 8-Core Processor', 16)
+        self.assertEqual(r.gpu.id, 'amd-r9-290-290x')
+        self.assertTrue(r.gpu.vulkan13)
+        self.assertGreater(r.tier, 0)
+        self.assertNotIn(('bad', 'gpu', 'Not supported: no Vulkan 1.3 driver for this card.'), r.checks)
+
     def test_no_vulkan_1_3_still_stops_the_port(self):
         r = rate_detected('NVIDIA GeForce GTX 780', 3, 'AMD Ryzen 7 5800X 8-Core Processor', 32)
         self.assertEqual(r.gpu.id, 'nvidia-gtx-780')
