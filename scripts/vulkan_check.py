@@ -69,10 +69,8 @@ def evaluate(loader, devices, gpu_id=None, adapters=()):
                            'missing': missing(d)} for d in devices], 'unseen': []}
     if loader is None:
         result['problem'] = 'loader'
-    elif loader < API:
-        result['problem'] = 'loader_version'
     elif not devices:
-        result['problem'] = 'devices'
+        result['problem'] = 'loader_version' if loader < API else 'devices'
     else:
         index = ranked(devices)[0]
         if gpu_id not in (None, ''):
@@ -84,7 +82,10 @@ def evaluate(loader, devices, gpu_id=None, adapters=()):
                 result['problem'] = 'devices'  # the game stops: no card with that number
                 return result
         result['device'] = result['devices'][index]
-        result['problem'] = 'device' if result['device']['missing'] else None
+        # Keep the detected card and its missing extensions visible even when the loader itself
+        # is too old. This is diagnostic only: the renderer still requires Vulkan 1.3.
+        result['problem'] = ('loader_version' if loader < API else
+                             'device' if result['device']['missing'] else None)
     result['ok'] = result['problem'] is None
     # A card Vulkan does not see matters when the game would not run on a working discrete one.
     if result['problem'] in ('devices', 'device') or result['ok'] and result['device']['type'] != 'discrete':
@@ -148,9 +149,12 @@ def query():
     version = c.c_uint32(1 << 22)  # a 1.0 loader has no vkEnumerateInstanceVersion
     if hasattr(vk, 'vkEnumerateInstanceVersion') and vk.vkEnumerateInstanceVersion(c.byref(version)) != 0:
         return None, []
-    if version.value < API:
+    # This is an inventory probe, not the game's renderer. Ask for the highest API the
+    # installed loader actually supports so Vulkan 1.2 devices can still be enumerated and
+    # their missing renderer requirements can be reported accurately.
+    if version.value < ((1 << 22) | (1 << 12)):  # Vulkan 1.1: Features2 is needed below
         return version.value, []
-    app = ApplicationInfo(0, None, b'bbport start check', 1, b'bbport', 1, API)
+    app = ApplicationInfo(0, None, b'bbport start check', 1, b'bbport', 1, min(version.value, API))
     create = InstanceCreateInfo(1, None, 0, c.pointer(app), 0, None, 0, None)
     instance = c.c_void_p()
     if vk.vkCreateInstance(c.byref(create), None, c.byref(instance)) != 0:
