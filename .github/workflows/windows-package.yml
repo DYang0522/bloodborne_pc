@@ -38,6 +38,7 @@ jobs:
           "WINPYTHON=$python" >> $env:GITHUB_ENV
 
       - name: Set up MSYS2 CLANG64
+        id: msys2
         uses: msys2/setup-msys2@v2
         with:
           msystem: CLANG64
@@ -76,6 +77,8 @@ jobs:
 
       - name: Build Bloodborne Windows binaries
         shell: msys2 {0}
+        env:
+          MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
         run: |
           set -euxo pipefail
           echo "WINPYTHON=$WINPYTHON"
@@ -85,6 +88,8 @@ jobs:
 
       - name: Package ready-to-run Windows ZIP
         shell: msys2 {0}
+        env:
+          MSYS2_ROOT: ${{ steps.msys2.outputs.msys2-location }}
         run: |
           set -euxo pipefail
           bash packaging/windows/package.sh --zip-only 2>&1 | tee package-windows.log
