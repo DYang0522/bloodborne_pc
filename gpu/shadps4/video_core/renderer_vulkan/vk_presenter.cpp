@@ -158,7 +158,8 @@ Presenter::Presenter(Frontend::WindowSDL& window_, AmdGpu::Liverpool* liverpool_
     fsr_settings.rcas_attenuation =
         static_cast<float>(EmulatorSettings.GetRcasAttenuation() / 1000.f);
 
-    fsr_pass.Create(device, instance.GetAllocator(), num_images);
+    fsr_pass.Create(device, instance.GetAllocator(), num_images,
+                    instance.IsShaderFloat16Supported());
     // bbport: frames are composed in RGBA8 (what frame generation reads and writes) and
     // blitted into the swapchain's format.
     pp_pass.Create(device, FrameGenerator::ColorFormat);
