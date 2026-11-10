@@ -1,7 +1,9 @@
 """scripts/vulkan_check.py: the start check asks for exactly what the game's renderer refuses to start
 without, on the card the renderer would pick."""
 from paths import ROOT
+import ast
 import json
+import os
 import re
 import subprocess
 import sys
@@ -97,7 +99,7 @@ class VerdictTests(unittest.TestCase):
 
     def test_the_card_the_game_picks(self):
         laptop = [card('Intel UHD', kind=1, memory=1 << 30), card('GeForce', memory=6 << 30),
-                  card('Old GeForce', api=V12, memory=12 << 30)]
+                  card('Old GeForce', api=V11, memory=12 << 30)]
         self.assertEqual(V.evaluate(V13, laptop)['device']['name'], 'GeForce')
         software = [card('llvmpipe', kind=V.CPU, memory=64 << 30), card('Radeon', kind=1, memory=2 << 30)]
         self.assertEqual(V.evaluate(V13, software)['device']['name'], 'Radeon')
@@ -144,8 +146,8 @@ class UnseenCardTests(unittest.TestCase):
         self.assertEqual(V.evaluate(V13, [apu], adapters=virtual)['unseen'], [])
 
     def test_a_card_its_driver_holds_back(self):
-        # R29: a GTX 1060 with Vulkan 1.2 from an old driver; the game picks the Vega, which has 1.3.
-        gtx = card('NVIDIA GeForce GTX 1060 6GB', api=V12, vendor=0x10DE, device_id=0x1C03, memory=6 << 30)
+        # A GTX 1060 whose driver only exposes Vulkan 1.1; the game picks the Vega, which has Vulkan 1.2.
+        gtx = card('NVIDIA GeForce GTX 1060 6GB', api=V11, vendor=0x10DE, device_id=0x1C03, memory=6 << 30)
         vega = card('AMD Radeon(TM) Vega 8 Graphics', kind=1, vendor=0x1002, device_id=0x15DD, memory=2 << 30)
         result = V.evaluate(V13, [gtx, vega])
         self.assertEqual(result['device']['name'], 'AMD Radeon(TM) Vega 8 Graphics')
@@ -187,11 +189,18 @@ class LauncherTests(unittest.TestCase):
     """How the launcher reads the answer (bbport_launcher_win.vulkan_verdict)."""
 
     def answer(self, stdout, code):
-        sys.path.insert(0, str(ROOT / 'launcher'))
-        import bbport_launcher_win as L
+        # Load only this function from the launcher: importing the whole UI also imports Pillow,
+        # Tkinter themes and the launcher's other runtime dependencies, none of which this test uses.
+        source = (ROOT / 'launcher' / 'bbport_launcher_win.py').read_text(encoding='utf-8')
+        tree = ast.parse(source)
+        function = next(node for node in tree.body
+                        if isinstance(node, ast.FunctionDef) and node.name == 'vulkan_verdict')
+        namespace = {'json': json, 'subprocess': subprocess, 'sys': sys, 'Path': __import__('pathlib').Path,
+                     'FROZEN': False, 'PORT_DIR': ROOT, 'NO_WINDOW': 0}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), 'bbport_launcher_win.py', 'exec'), namespace)
         done = subprocess.CompletedProcess([], code, stdout, '')
-        with mock.patch.object(L.subprocess, 'run', return_value=done):
-            return L.vulkan_verdict({})
+        with mock.patch.object(subprocess, 'run', return_value=done):
+            return namespace['vulkan_verdict']({})
 
     def test_its_json_line(self):
         self.assertEqual(self.answer('loader noise\n{"ok": true, "problem": null}\n', 0), {'ok': True, 'problem': None})
@@ -213,6 +222,8 @@ class ThisPcTests(unittest.TestCase):
         self.assertIsInstance(verdict['unseen'], list)
 
     @unittest.skipUnless(sys.platform == 'win32', "Windows' own list of cards")
+    @unittest.skipIf(os.environ.get('GITHUB_ACTIONS') == 'true',
+                     'GitHub-hosted runners expose a software adapter, not a player's graphics card')
     def test_windows_lists_its_cards(self):
         adapters = V.windows_adapters()
         self.assertNotIn('Microsoft Basic Render Driver', [a['name'] for a in adapters])  # its software renderer
