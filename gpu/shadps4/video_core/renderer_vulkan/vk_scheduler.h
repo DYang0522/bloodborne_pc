@@ -946,7 +946,8 @@ private:
     vk::Queue execution_queue;
     Semaphore work_semaphore;
     CommandPool command_pool;
-    DescriptorHeap descriptor_heap;
+    std::mutex descriptor_heap_mutex;
+    std::unique_ptr<DescriptorHeap> descriptor_heap;
     DynamicState dynamic_state;
     SubmitFunc on_submit{};
     vk::CommandBuffer current_cmdbuf;
