@@ -73,6 +73,13 @@ class VerdictTests(unittest.TestCase):
         self.assertTrue(result['ok'])
         self.assertEqual(result['device']['missing'], [])
 
+    def test_missing_vulkan_12_compatibility_feature_is_named(self):
+        extensions = (*V.REQUIRED_EXTENSIONS, *V.VULKAN_12_EXTENSIONS)
+        features = dict.fromkeys((*V.REQUIRED_FEATURES, *V.VULKAN_12_FEATURES), True)
+        features['dynamicRendering'] = False
+        result = V.evaluate(V12, [card(api=V12, extensions=extensions, features=features)])
+        self.assertEqual(result['device']['missing'], ['dynamicRendering'])
+
     def test_what_a_card_lacks_is_named(self):
         old = card('Old card', api=V12, extensions=['VK_KHR_swapchain'])
         result = V.evaluate(V13, [old])
@@ -80,7 +87,8 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(result['device']['missing'], ['VK_KHR_push_descriptor',
                                                        'VK_EXT_vertex_attribute_divisor', 'VK_EXT_robustness2',
                                                        *V.VULKAN_12_EXTENSIONS])
-        partial = card(features={'robustBufferAccess2': True, 'robustImageAccess2': True, 'nullDescriptor': False})
+        partial = card(features={'robustBufferAccess2': True, 'robustImageAccess2': True, 'nullDescriptor': False,
+                                 **dict.fromkeys(V.VULKAN_12_FEATURES, True)})
         self.assertEqual(V.evaluate(V13, [partial])['device']['missing'], ['nullDescriptor'])
 
     def test_the_card_the_game_picks(self):
