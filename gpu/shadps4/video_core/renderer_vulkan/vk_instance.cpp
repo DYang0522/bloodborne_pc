@@ -541,12 +541,16 @@ bool Instance::CreateDevice() {
     // requested only when the DLL is installed and the device has all of them, so nothing changes
     // for other paths.
 #ifdef _WIN32
-    const char* missing_fsr4vk_feature = Fsr411VulkanRequirement(physical_device,
-        VULKAN_HPP_DEFAULT_DISPATCHER.vkGetPhysicalDeviceProperties,
-        VULKAN_HPP_DEFAULT_DISPATCHER.vkEnumerateDeviceExtensionProperties,
-        VULKAN_HPP_DEFAULT_DISPATCHER.vkGetPhysicalDeviceFeatures2);
+    const char* missing_fsr4vk_feature =
+        properties.apiVersion < VK_API_VERSION_1_3
+            ? "Vulkan 1.3"
+            : Fsr411VulkanRequirement(physical_device,
+                  VULKAN_HPP_DEFAULT_DISPATCHER.vkGetPhysicalDeviceProperties,
+                  VULKAN_HPP_DEFAULT_DISPATCHER.vkEnumerateDeviceExtensionProperties,
+                  VULKAN_HPP_DEFAULT_DISPATCHER.vkGetPhysicalDeviceFeatures2);
     const bool fsr4vk_files = Fsr4Vk::FilesPresent();
-    fsr4vk = fsr4vk_files && !missing_fsr4vk_feature;
+    fsr4vk = properties.apiVersion >= VK_API_VERSION_1_3 && fsr4vk_files &&
+             !missing_fsr4vk_feature;
     const char* fsr4vk_enabled = std::getenv("BB_FSR4VK");
     const bool query_failed = missing_fsr4vk_feature &&
         !std::strcmp(missing_fsr4vk_feature, "Vulkan extension query");
