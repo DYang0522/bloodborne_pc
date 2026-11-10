@@ -44,6 +44,11 @@ void Swapchain::Create(u32 width_, u32 height_) {
     Destroy();
 
     SetSurfaceProperties();
+    LOG_INFO(Render_Vulkan,
+             "Swapchain setup: surface properties ready ({}x{}, format={}, present mode={})",
+             extent.width, extent.height, vk::to_string(needs_hdr ? SURFACE_FORMAT_HDR.format
+                                                                  : surface_format.format),
+             vk::to_string(present_mode));
 
     const std::array queue_family_indices = {
         instance.GetGraphicsQueueFamilyIndex(),
@@ -80,9 +85,12 @@ void Swapchain::Create(u32 width_, u32 height_) {
                vk::to_string(swapchain_result));
     swapchain = chain;
     LowLatency::OnSwapchain(swapchain);
+    LOG_INFO(Render_Vulkan, "Swapchain setup: native swapchain created");
 
     SetupImages();
+    LOG_INFO(Render_Vulkan, "Swapchain setup: {} image views created", images_view.size());
     RefreshSemaphores();
+    LOG_INFO(Render_Vulkan, "Swapchain setup: frame semaphores created");
 }
 
 void Swapchain::Recreate(u32 width_, u32 height_) {
@@ -284,6 +292,10 @@ void Swapchain::SetSurfaceProperties() {
     if (!(capabilities.supportedCompositeAlpha & vk::CompositeAlphaFlagBitsKHR::eOpaque)) {
         composite_alpha = vk::CompositeAlphaFlagBitsKHR::eInherit;
     }
+    LOG_INFO(Render_Vulkan,
+             "Swapchain capabilities: extent={}x{}, images={}..{}, usage={:#x}",
+             extent.width, extent.height, capabilities.minImageCount,
+             capabilities.maxImageCount, static_cast<VkImageUsageFlags>(capabilities.supportedUsageFlags));
 }
 
 void Swapchain::Destroy() {

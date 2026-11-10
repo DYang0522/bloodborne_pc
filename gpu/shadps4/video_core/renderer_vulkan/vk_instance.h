@@ -593,6 +593,7 @@ private:
     std::vector<vk::PhysicalDevice> physical_devices;
     std::vector<std::string> available_extensions;
     std::unordered_map<vk::Format, vk::FormatProperties3> format_properties;
+    bool has_format_feature_flags2{};
     TracyVkCtx profiler_context{};
     u32 queue_family_index{0};
     bool custom_border_color{};

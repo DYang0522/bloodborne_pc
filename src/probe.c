@@ -164,6 +164,39 @@ static void describe_address(char *out, size_t size, uintptr_t address) {
     snprintf(out,size,"%p",(void *)address);
 }
 static int fatal_reported;
+static volatile LONG ntdll_first_chance_count;
+static void report_ntdll_first_chance(EXCEPTION_POINTERS *info) {
+    const EXCEPTION_RECORD *record=info->ExceptionRecord;
+    if (record->ExceptionCode!=EXCEPTION_ACCESS_VIOLATION || record->NumberParameters<2) return;
+    uintptr_t rip=(uintptr_t)info->ContextRecord->Rip;
+    HMODULE owner=NULL;
+    if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|
+                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCSTR)rip,&owner) || owner!=GetModuleHandleA("ntdll.dll")) return;
+    LONG count=InterlockedIncrement(&ntdll_first_chance_count);
+    if (count>4) return;
+    char where[MAX_PATH+64], target[MAX_PATH+64];
+    describe_address(where,sizeof(where),rip);
+    describe_address(target,sizeof(target),(uintptr_t)record->ExceptionInformation[1]);
+    fprintf(stderr,
+            "First-chance ntdll access violation #%ld: %s access to %s at %s (thread %lu)\n",
+            count, record->ExceptionInformation[0]==1 ? "write" :
+                   record->ExceptionInformation[0]==8 ? "execute" : "read",
+            target, where, GetCurrentThreadId());
+    const CONTEXT *c=info->ContextRecord;
+    int shown=0;
+    for (int slot=0;slot<48 && shown<12;++slot) {
+        uintptr_t value=0;
+        SIZE_T got=0;
+        if (!ReadProcessMemory(GetCurrentProcess(),(void *)(uintptr_t)(c->Rsp+slot*8),
+                               &value,sizeof(value),&got) || got!=sizeof(value)) break;
+        if (value<0x10000) continue;
+        describe_address(where,sizeof(where),value);
+        fprintf(stderr,"  stack[%02d] %s\n",slot,where);
+        ++shown;
+    }
+    fflush(stderr);
+}
 static LONG fatal_exception(EXCEPTION_POINTERS *info) {
     if (__atomic_exchange_n(&fatal_reported,1,__ATOMIC_ACQ_REL)) { Sleep(INFINITE); }
     const EXCEPTION_RECORD *record=info->ExceptionRecord;
@@ -210,6 +243,7 @@ static LONG fatal_exception(EXCEPTION_POINTERS *info) {
 static LONG CALLBACK vectored_fault(EXCEPTION_POINTERS *info) {
     const EXCEPTION_RECORD *record=info->ExceptionRecord;
     DWORD code=record->ExceptionCode;
+    if (code==EXCEPTION_ACCESS_VIOLATION) report_ntdll_first_chance(info);
     if (code==EXCEPTION_ACCESS_VIOLATION && record->NumberParameters>=2) {
         /* GPU page tracking (write-protected guest pages) is resolved first. */
         if (gpu_enabled && bbgpu_handle_fault(info,(void *)record->ExceptionInformation[1])) return EXCEPTION_CONTINUE_EXECUTION;

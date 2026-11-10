@@ -210,11 +210,11 @@ Instance::Instance(const Frontend::WindowSystemInfo& window_info, s32 physical_d
 
     available_extensions = GetSupportedExtensions(physical_device);
     properties = physical_device.getProperties();
-    const bool supports_format_feature_flags2 =
+    has_format_feature_flags2 =
         properties.apiVersion >= VK_API_VERSION_1_3 ||
         std::find(available_extensions.begin(), available_extensions.end(),
                   VK_KHR_FORMAT_FEATURE_FLAGS_2_EXTENSION_NAME) != available_extensions.end();
-    format_properties = GetFormatProperties(physical_device, supports_format_feature_flags2);
+    format_properties = GetFormatProperties(physical_device, has_format_feature_flags2);
     memory_properties = physical_device.getMemoryProperties();
     CollectDeviceParameters();
     ASSERT_MSG(properties.apiVersion >= TargetVulkanApiVersion,
@@ -742,7 +742,9 @@ bool Instance::CreateDevice() {
                 .shaderStorageImageExtendedFormats = features.shaderStorageImageExtendedFormats,
                 .shaderStorageImageMultisample = features.shaderStorageImageMultisample,
                 // bbport: required by the FSR 3 accumulate shaders (vk_temporal_upscaler).
-                .shaderStorageImageReadWithoutFormat = fsr4vk,
+                // This is a core Vulkan 1.0 feature. Keep it enabled whenever the physical
+                // device supports it; restricting it to FSR4VK breaks guest storage-image reads.
+                .shaderStorageImageReadWithoutFormat = features.shaderStorageImageReadWithoutFormat,
                 .shaderStorageImageWriteWithoutFormat =
                     features.shaderStorageImageWriteWithoutFormat,
                 .shaderClipDistance = features.shaderClipDistance,
@@ -1246,7 +1248,20 @@ vk::FormatFeatureFlags2 Instance::GetFormatFeatureFlags(vk::Format format) const
         UNIMPLEMENTED_MSG("Properties of format {} have not been queried.", vk::to_string(format));
     }
 
-    return it->second.optimalTilingFeatures | it->second.bufferFeatures;
+    auto flags = it->second.optimalTilingFeatures | it->second.bufferFeatures;
+    if (!has_format_feature_flags2 && (flags & vk::FormatFeatureFlagBits2::eStorageImage)) {
+        // Vulkan 1.2 drivers without VK_KHR_format_feature_flags2 can report only the
+        // legacy 32-bit format flags. The two formatless-storage bits have no legacy
+        // representation, so derive them from the corresponding core device features.
+        // Restrict the inference to formats that advertise STORAGE_IMAGE support.
+        if (features.shaderStorageImageReadWithoutFormat) {
+            flags |= vk::FormatFeatureFlagBits2::eStorageReadWithoutFormat;
+        }
+        if (features.shaderStorageImageWriteWithoutFormat) {
+            flags |= vk::FormatFeatureFlagBits2::eStorageWriteWithoutFormat;
+        }
+    }
+    return flags;
 }
 
 bool Instance::IsFormatSupported(const vk::Format format,
