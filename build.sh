@@ -66,7 +66,7 @@ MINGW*|MSYS*)
             echo "Ninja failed and LLD did not produce its link reproduction archive." >&2
             exit 1
         fi
-        rm -rf out/link-repro
+        "$powershell_exe" -NoProfile -Command 'Remove-Item -LiteralPath "out/link-repro" -Recurse -Force -ErrorAction SilentlyContinue'
         mkdir -p out/link-repro
         tar -xf out/gpu-build.log -C out/link-repro
         (
@@ -75,8 +75,8 @@ MINGW*|MSYS*)
         )
         cp out/link-repro/gpu-build/bb-probe.exe out/gpu/bb-probe.exe
         cp out/link-repro/gpu-build/libbb-probe.dll.a out/gpu/libbb-probe.dll.a
-        rm -rf out/link-repro
-        rm -f "$PWD/out/gpu-build.log"
+        "$powershell_exe" -NoProfile -Command 'Remove-Item -LiteralPath "out/link-repro" -Recurse -Force -ErrorAction SilentlyContinue'
+        "$powershell_exe" -NoProfile -Command 'Remove-Item -LiteralPath "out/gpu-build.log" -Force -ErrorAction SilentlyContinue'
         for exe in bb-probe.exe bb-gpu-capabilities.exe bb-fg401-capabilities.exe bb-play.exe; do
             if [[ ! -f "out/gpu/$exe" ]]; then
                 ninja -d keeprsp -v -C out/gpu bb-probe bb-gpu-capabilities bb-fg401-capabilities bb-play
@@ -84,8 +84,8 @@ MINGW*|MSYS*)
             fi
         done
     fi
-    rm -f "$PWD/out/gpu-build.log" # LLD reproduction archive is only needed on failure.
-    rm -f out/run-ninja.ps1
+    "$powershell_exe" -NoProfile -Command 'Remove-Item -LiteralPath "out/gpu-build.log" -Force -ErrorAction SilentlyContinue' # LLD reproduction archive is only needed on failure.
+    "$powershell_exe" -NoProfile -Command 'Remove-Item -LiteralPath "out/run-ninja.ps1" -Force -ErrorAction SilentlyContinue'
     cp out/gpu/bb-probe.exe out/gpu/bb-gpu-capabilities.exe out/gpu/bb-fg401-capabilities.exe out/gpu/bb-play.exe out/
     echo "Built $PWD/out/bb-probe.exe"
     exit 0
