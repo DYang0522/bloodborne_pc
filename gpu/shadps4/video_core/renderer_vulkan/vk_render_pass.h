@@ -91,10 +91,7 @@ inline vk::UniqueRenderPass CreateLegacyRenderPass(
         .subpassCount = 1,
         .pSubpasses = &subpass,
     };
-    auto [result, render_pass] = device.createRenderPass2Unique(create_info);
-    ASSERT_MSG(result == vk::Result::eSuccess, "Failed to create legacy render pass: {}",
-               vk::to_string(result));
-    return std::move(render_pass);
+    return Check<"create legacy render pass">(device.createRenderPass2Unique(create_info));
 }
 
 inline vk::UniqueFramebuffer CreateLegacyFramebuffer(vk::Device device, vk::RenderPass render_pass,
@@ -108,10 +105,7 @@ inline vk::UniqueFramebuffer CreateLegacyFramebuffer(vk::Device device, vk::Rend
         .height = height,
         .layers = layers,
     };
-    auto [result, framebuffer] = device.createFramebufferUnique(create_info);
-    ASSERT_MSG(result == vk::Result::eSuccess, "Failed to create legacy framebuffer: {}",
-               vk::to_string(result));
-    return std::move(framebuffer);
+    return Check<"create legacy framebuffer">(device.createFramebufferUnique(create_info));
 }
 
 } // namespace Vulkan
