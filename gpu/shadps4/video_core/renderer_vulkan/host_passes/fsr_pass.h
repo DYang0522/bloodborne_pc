@@ -7,6 +7,8 @@
 #include "video_core/renderer_vulkan/vk_common.h"
 #include "video_core/texture_cache/image.h"
 
+namespace Vulkan { class Scheduler; }
+
 namespace Vulkan::HostPasses {
 
 class FsrPass {
@@ -18,7 +20,7 @@ public:
     };
 
     /// use_fp16=false selects full-precision shaders on GPUs without shaderFloat16.
-    void Create(vk::Device device, VmaAllocator allocator, u32 num_images, bool use_fp16 = true);
+    void Create(vk::Device device, VmaAllocator allocator, u32 num_images, Scheduler& scheduler, bool use_fp16 = true);
 
     vk::ImageView Render(vk::CommandBuffer cmdbuf, vk::ImageView input, vk::Extent2D input_size,
                          vk::Extent2D output_size, Settings settings, bool hdr);
@@ -38,6 +40,7 @@ private:
     void ResizeAndInvalidate(u32 width, u32 height);
     void CreateImages(Img& img) const;
 
+    Scheduler* scheduler{};
     vk::Device device{};
     u32 num_images{};
 
