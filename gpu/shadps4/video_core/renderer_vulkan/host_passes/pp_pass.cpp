@@ -11,6 +11,7 @@
 #include "video_core/renderer_vulkan/vk_presenter.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
+#include "video_core/renderer_vulkan/vk_render_pass.h"
 
 #include <boost/container/static_vector.hpp>
 
@@ -72,13 +73,11 @@ void PostProcessingPass::Create(vk::Device device, const vk::Format surface_form
     pipeline_layout =
         Check<"create pp pipeline layout">(device.createPipelineLayoutUnique(layout_info));
 
-    const std::array pp_color_formats{
-        surface_format,
-    };
-    const vk::PipelineRenderingCreateInfo pipeline_rendering_ci{
-        .colorAttachmentCount = pp_color_formats.size(),
-        .pColorAttachmentFormats = pp_color_formats.data(),
-    };
+    const std::array pp_color_formats{surface_format};
+    const std::array pp_color_samples{vk::SampleCountFlagBits::e1};
+    render_pass = CreateLegacyRenderPass(device, pp_color_formats, pp_color_samples,
+                                         vk::Format::eUndefined,
+                                         vk::SampleCountFlagBits::e1);
 
     const vk::PipelineVertexInputStateCreateInfo vertex_input_info{
         .vertexBindingDescriptionCount = 0u,
@@ -151,7 +150,7 @@ void PostProcessingPass::Create(vk::Device device, const vk::Format surface_form
     };
 
     const vk::GraphicsPipelineCreateInfo pipeline_info{
-        .pNext = &pipeline_rendering_ci,
+        .pNext = nullptr,
         .stageCount = shaders_ci.size(),
         .pStages = shaders_ci.data(),
         .pVertexInputState = &vertex_input_info,
@@ -162,6 +161,8 @@ void PostProcessingPass::Create(vk::Device device, const vk::Format surface_form
         .pColorBlendState = &color_blending,
         .pDynamicState = &dynamic_info,
         .layout = *pipeline_layout,
+        .renderPass = *render_pass,
+        .subpass = 0,
     };
 
     pipeline = Check<"create post process pipeline">(device.createGraphicsPipelineUnique(
@@ -195,25 +196,17 @@ void PostProcessingPass::Render(vk::CommandBuffer cmdbuf, vk::ImageView input,
         .levelCount = 1,
         .layerCount = 1,
     };
-    const std::array<vk::RenderingAttachmentInfo, 1> attachments{{
-        {
-            .imageView = frame.image_view,
-            .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-            .loadOp = vk::AttachmentLoadOp::eClear,
-            .storeOp = vk::AttachmentStoreOp::eStore,
-        },
-    }};
-    const vk::RenderingInfo rendering_info{
-        .renderArea{
-            .extent{
-                .width = frame.width,
-                .height = frame.height,
-            },
-        },
-        .layerCount = 1,
-        .colorAttachmentCount = attachments.size(),
-        .pColorAttachments = attachments.data(),
-    };
+    RenderState render_state{};
+    render_state.width = static_cast<u16>(frame.width);
+    render_state.height = static_cast<u16>(frame.height);
+    render_state.num_layers = 1;
+    render_state.num_color_attachments = 1;
+    auto& color_attachment = render_state.color_attachments[0];
+    color_attachment.image_view = frame.image_view;
+    color_attachment.image_layout = vk::ImageLayout::eColorAttachmentOptimal;
+    color_attachment.format = static_cast<u32>(FrameGenerator::ColorFormat);
+    color_attachment.samples = static_cast<u32>(vk::SampleCountFlagBits::e1);
+    color_attachment.is_clear = 1;
 
     vk::DescriptorImageInfo image_info{
         .sampler = *sampler,
@@ -232,6 +225,7 @@ void PostProcessingPass::Render(vk::CommandBuffer cmdbuf, vk::ImageView input,
         },
     };
 
+    scheduler->BeginRendering(render_state);
     cmdbuf.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
 
     const std::array viewports = {
@@ -257,9 +251,8 @@ void PostProcessingPass::Render(vk::CommandBuffer cmdbuf, vk::ImageView input,
     cmdbuf.pushConstants(*pipeline_layout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(Settings),
                          &settings);
 
-    cmdbuf.beginRendering(rendering_info);
     cmdbuf.draw(3, 1, 0, 0);
-    cmdbuf.endRendering();
+    scheduler->EndRendering();
 
     const auto post_barrier = vk::ImageMemoryBarrier2{
         .srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
