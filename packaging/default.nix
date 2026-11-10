@@ -128,7 +128,6 @@ pkgs.stdenv.mkDerivation {
       ${common}      --add-flags "$out/share/bbport/launcher/bbport_vulkan.py ${pkgs.bash}/bin/bash $out/share/bbport/run.sh" \
       --set BB_PREBUILT 1 \
       --set PYTHON ${startPython}/bin/python3 \
-      --set BB_BUNDLED_VK_DRIVER_FILES ${icds} \
       --prefix PATH : ${lib.makeBinPath [ pkgs.bash pkgs.coreutils ]} \
       --run 'export BB_DATA_DIR=''${BB_DATA_DIR:-''${XDG_DATA_HOME:-$HOME/.local/share}/bbport}; mkdir -p "$BB_DATA_DIR"'
   '';
