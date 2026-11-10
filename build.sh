@@ -23,19 +23,13 @@ MINGW*|MSYS*)
     cmake -S gpu -B out/gpu -G Ninja -DCMAKE_BUILD_TYPE=Release -DBB_PGO=off \
         -DBB_LTO="${BB_LTO:-OFF}" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ >/dev/null
     echo "GPU library and loader: LTO ${BB_LTO:-OFF}"
-    # Capture Ninja output to an absolute path first, then replay it into the Actions log.
-    # Avoid a pipeline here: the log must exist even when Ninja exits before producing output.
-    gpu_build_log="$PWD/out/gpu-build-text.log"
-    : > "$gpu_build_log"
-    set +e
-    ninja -d keeprsp -v -C out/gpu bb-probe bb-gpu-capabilities bb-fg401-capabilities bb-play >"$gpu_build_log" 2>&1
-    gpu_build_status=$?
-    set -e
-    cat "$gpu_build_log"
-    if (( gpu_build_status != 0 )); then
-        echo "Build failed with Ninja exit code $gpu_build_status (full log: $gpu_build_log)" >&2
-        exit "$gpu_build_status"
-    fi
+    # Verify that this CLANG64 compiler can invoke the COFF linker selected for bb-probe.
+    printf 'int main() { return 0; }\\n' > out/linker-probe.cpp
+    clang++ -fuse-ld=lld-link out/linker-probe.cpp -o out/linker-probe.exe
+    rm -f out/linker-probe.cpp out/linker-probe.exe
+    # Let the workflow's tee capture the complete Ninja output; out/gpu-build.log is
+    # reserved for LLD's --reproduce archive if the final bb-probe link fails.
+    ninja -d keeprsp -v -C out/gpu bb-probe bb-gpu-capabilities bb-fg401-capabilities bb-play
     rm -f "$PWD/out/gpu-build.log" # LLD reproduction archive is only needed on failure.
     cp out/gpu/bb-probe.exe out/gpu/bb-gpu-capabilities.exe out/gpu/bb-fg401-capabilities.exe out/gpu/bb-play.exe out/
     echo "Built $PWD/out/bb-probe.exe"
