@@ -1112,8 +1112,7 @@ class HelpMixin:
             return _('The Vulkan files of the graphics driver are too old ({} of the 1.2 the port needs). Install '
                      'the current driver for your graphics card.').format(verdict.get('loader'))
         if problem == 'devices':
-            return _('No graphics card with Vulkan 1.2 and the required extensions was found. The port needs a compatible card and driver '
-                     'or newer) with a current driver.')
+            return _('No graphics card with Vulkan 1.2 and all required extensions and features was found. Update the graphics driver or use a compatible card.')
         if problem == 'device':
             lacks = ', '.join(device.get('missing', []))  # its names in Vulkan's words: what to search for
             return _('{0} cannot run the port: its driver lacks {1}. Update the graphics driver; if that does not '
