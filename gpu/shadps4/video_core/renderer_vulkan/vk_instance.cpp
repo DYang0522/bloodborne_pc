@@ -309,8 +309,6 @@ bool Instance::CreateDevice() {
         is_vulkan_13 || supports_extension(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME);
     const bool synchronization2_available =
         is_vulkan_13 || supports_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-    const bool dynamic_rendering_available =
-        is_vulkan_13 || supports_extension(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     const bool integer_dot_product_available =
         is_vulkan_13 || supports_extension(VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME);
     const bool maintenance4_available =
@@ -329,7 +327,6 @@ bool Instance::CreateDevice() {
         vk::PhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT,
         vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT,
         vk::PhysicalDeviceSynchronization2FeaturesKHR,
-        vk::PhysicalDeviceDynamicRenderingFeaturesKHR,
         vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR,
         vk::PhysicalDeviceMaintenance4FeaturesKHR,
         vk::PhysicalDeviceRobustness2FeaturesEXT,
@@ -355,9 +352,6 @@ bool Instance::CreateDevice() {
     }
     if (!synchronization2_available) {
         feature_chain.unlink<vk::PhysicalDeviceSynchronization2FeaturesKHR>();
-    }
-    if (!dynamic_rendering_available) {
-        feature_chain.unlink<vk::PhysicalDeviceDynamicRenderingFeaturesKHR>();
     }
     if (!integer_dot_product_available) {
         feature_chain.unlink<vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR>();
@@ -430,8 +424,6 @@ bool Instance::CreateDevice() {
                VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
     ASSERT_MSG(add_extension(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME),
                "Required Vulkan extension unavailable: {}", VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
-    ASSERT_MSG(is_vulkan_13 || add_extension(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME),
-               "Required Vulkan extension unavailable: {}", VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     ASSERT_MSG(is_vulkan_13 || add_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME),
                "Required Vulkan extension unavailable: {}", VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
     ASSERT_MSG(is_vulkan_13 || add_extension(VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME),
@@ -455,8 +447,6 @@ bool Instance::CreateDevice() {
                "Required Vulkan feature unavailable: robustImageAccess2");
     ASSERT_MSG(robustness2_features.nullDescriptor,
                "Required Vulkan feature unavailable: nullDescriptor");
-    ASSERT_MSG(feature_chain.get<vk::PhysicalDeviceDynamicRenderingFeaturesKHR>().dynamicRendering,
-               "Required Vulkan feature unavailable: dynamicRendering");
     ASSERT_MSG(feature_chain.get<vk::PhysicalDeviceSynchronization2FeaturesKHR>().synchronization2,
                "Required Vulkan feature unavailable: synchronization2");
     ASSERT_MSG(feature_chain.get<vk::PhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT>()
@@ -664,8 +654,6 @@ bool Instance::CreateDevice() {
         feature_chain.get<vk::PhysicalDeviceSubgroupSizeControlFeaturesEXT>().subgroupSizeControl;
     vk13_features.synchronization2 =
         feature_chain.get<vk::PhysicalDeviceSynchronization2FeaturesKHR>().synchronization2;
-    vk13_features.dynamicRendering =
-        feature_chain.get<vk::PhysicalDeviceDynamicRenderingFeaturesKHR>().dynamicRendering;
     vk13_features.shaderIntegerDotProduct =
         feature_chain.get<vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR>()
             .shaderIntegerDotProduct;
@@ -798,9 +786,6 @@ bool Instance::CreateDevice() {
         },
         vk::PhysicalDeviceSynchronization2FeaturesKHR{
             .synchronization2 = vk13_features.synchronization2,
-        },
-        vk::PhysicalDeviceDynamicRenderingFeaturesKHR{
-            .dynamicRendering = vk13_features.dynamicRendering,
         },
         vk::PhysicalDeviceShaderIntegerDotProductFeaturesKHR{
             .shaderIntegerDotProduct = vk13_features.shaderIntegerDotProduct,
@@ -1013,17 +998,9 @@ bool Instance::CreateDevice() {
     if (!is_vulkan_13) {
         // Vulkan-Hpp's core command wrappers call the 1.3 entry-point names. On a 1.2
         // device, route those wrappers to the enabled KHR aliases.
-        ASSERT_MSG(VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdBeginRenderingKHR &&
-                       VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdEndRenderingKHR &&
-                       VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdPipelineBarrier2KHR &&
+        ASSERT_MSG(VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdPipelineBarrier2KHR &&
                        VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdWriteTimestamp2KHR,
-                   "Required Vulkan 1.2 rendering/synchronization entry points are unavailable");
-        VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdBeginRendering =
-            reinterpret_cast<PFN_vkCmdBeginRendering>(
-                VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdBeginRenderingKHR);
-        VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdEndRendering =
-            reinterpret_cast<PFN_vkCmdEndRendering>(
-                VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdEndRenderingKHR);
+                   "Required Vulkan 1.2 synchronization entry points are unavailable");
         VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdPipelineBarrier2 =
             reinterpret_cast<PFN_vkCmdPipelineBarrier2>(
                 VULKAN_HPP_DEFAULT_DISPATCHER.vkCmdPipelineBarrier2KHR);
