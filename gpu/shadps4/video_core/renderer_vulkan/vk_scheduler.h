@@ -47,6 +47,8 @@ struct RenderAttachment {
             bool stencil_clear;
         };
     };
+    u32 format;
+    u32 samples;
 };
 static_assert(std::has_unique_object_representations_v<RenderAttachment>);
 
@@ -666,6 +668,16 @@ private:
 };
 
 class Scheduler {
+    struct LegacyRenderTarget {
+        RenderState state;
+        vk::UniqueRenderPass render_pass;
+        vk::UniqueFramebuffer framebuffer;
+    };
+    struct PendingRenderTargets {
+        u64 tick;
+        std::vector<LegacyRenderTarget> targets;
+    };
+
 public:
     /// `threaded_recording`: Vulkan commands passed to Record() are recorded by a worker thread.
     explicit Scheduler(const Instance& instance, bool threaded_recording = false,
@@ -932,6 +944,8 @@ private:
     std::jthread priority_pending_ops_thread;
     RenderState render_state;
     bool is_rendering = false;
+    std::vector<LegacyRenderTarget> render_targets;
+    std::deque<PendingRenderTargets> pending_render_targets;
     // bbport: threaded recording
     std::unique_ptr<RecordChunk> record_chunk;
     std::vector<std::unique_ptr<RecordChunk>> full_chunks;
