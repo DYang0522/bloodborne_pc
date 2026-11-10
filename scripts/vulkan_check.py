@@ -16,7 +16,7 @@ working discrete card: a GeForce whose Vulkan driver does not answer leaves the 
 graphics (a player's RTX 5070 Ti, 30 October 2026). "held_back": discrete cards Vulkan lists but whose driver
 lacks something, while the game runs on the processor's graphics (only then present).
 
-tests/test_vulkan_check.py keeps API, REQUIRED_EXTENSIONS and REQUIRED_FEATURES equal to the renderer's."""
+tests/test_vulkan_check.py keeps the API baseline, required extensions and feature bits in sync with the renderer."""
 import ctypes
 import json
 import os
