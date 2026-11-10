@@ -420,7 +420,12 @@ def _words(text):
 def _keys(gpu):
     parts = [_words(p).strip() for p in re.sub(r'\b\d+ GB\b', '', re.sub(r'\(.*?\)', '', gpu.name)).split('/')]
     prefix = ' '.join(parts[0].split(' ')[:-1])
-    return [f'{prefix} {p}' if i and p[:1].isdigit() else p for i, p in enumerate(parts) if p]
+    keys = [f'{prefix} {p}' if i and p[:1].isdigit() else p for i, p in enumerate(parts) if p]
+    # AMD's Windows driver commonly reports the whole Hawaii family as "R9 200 Series",
+    # not the retail name "R9 290 / 290X". Keep the legacy card detectable by that driver name.
+    if gpu.vendor == 'amd' and 'r9 290' in gpu.name.lower():
+        keys.append('r9 200 series')
+    return keys
 
 
 def match_gpu(name, vram_gb=None):
