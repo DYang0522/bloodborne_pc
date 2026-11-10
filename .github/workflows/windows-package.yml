@@ -1,6 +1,9 @@
 name: Windows package
 
 on:
+  push:
+    branches:
+      - vulkan12-r9-290x
   workflow_dispatch:
 
 permissions:
