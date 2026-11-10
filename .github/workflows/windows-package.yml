@@ -30,6 +30,9 @@ jobs:
       - name: Test Vulkan compatibility detection
         shell: pwsh
         run: python -m unittest discover -s tests -p "test_vulkan_check.py" -v
+      - name: Test launcher hardware ratings
+        shell: pwsh
+        run: python -m unittest discover -s tests -p "test_launcher_hardware.py" -v
 
       - name: Export Windows Python path
         shell: pwsh
