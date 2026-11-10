@@ -3,6 +3,7 @@
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_runtime.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
+#include "video_core/renderer_vulkan/vk_render_pass.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
 #include "video_core/texture_cache/texture_cache.h"
 #include "video_core/host_shaders/depth_resample_frag.h"
@@ -248,23 +249,21 @@ void SceneTargets::Resample(vk::Image src, vk::Image dst, const VideoCore::Image
     });
     const auto pipeline = ResamplePipeline(format, stencil);
     const auto layout = *resample_layout;
+    RenderState render_state{};
+    render_state.width = static_cast<u16>(dst_size.width);
+    render_state.height = static_cast<u16>(dst_size.height);
+    render_state.num_layers = 1;
+    auto& depth_attachment = render_state.depth_stencil_attachment;
+    depth_attachment.image_view = target_view;
+    depth_attachment.image_layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+    depth_attachment.format = static_cast<u32>(format);
+    depth_attachment.samples = static_cast<u32>(vk::SampleCountFlagBits::e1);
+    depth_attachment.has_depth = true;
+    depth_attachment.has_stencil = stencil;
+    depth_attachment.stencil_clear = stencil_bits;
+    depth_attachment.clear_value[1] = 0;
+    scheduler.BeginRendering(render_state);
     scheduler.Record([=](vk::CommandBuffer cmd) {
-        const vk::RenderingAttachmentInfo attachment{
-            .imageView = target_view,
-            .imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
-            .loadOp = vk::AttachmentLoadOp::eDontCare,
-            .storeOp = vk::AttachmentStoreOp::eStore,
-        };
-        auto stencil_attachment = attachment;
-        if (stencil_bits) {
-            stencil_attachment.loadOp = vk::AttachmentLoadOp::eClear;
-            stencil_attachment.clearValue.depthStencil = vk::ClearDepthStencilValue{0.f, 0};
-        }
-        cmd.beginRendering({
-            .renderArea = {{0, 0}, dst_size}, .layerCount = 1,
-            .pDepthAttachment = &attachment,
-            .pStencilAttachment = stencil ? &stencil_attachment : nullptr,
-        });
         const std::array infos{
             vk::DescriptorImageInfo{{}, depth_view, vk::ImageLayout::eShaderReadOnlyOptimal},
             vk::DescriptorImageInfo{{}, stencil_view, vk::ImageLayout::eShaderReadOnlyOptimal},
@@ -297,8 +296,8 @@ void SceneTargets::Resample(vk::Image src, vk::Image dst, const VideoCore::Image
         } else {
             cmd.draw(3, 1, 0, 0);
         }
-        cmd.endRendering();
     });
+    scheduler.EndRendering();
     // The guest pipelines' dynamic state must be emitted again after this pipeline.
     scheduler.GetDynamicState().Invalidate();
 }
@@ -366,10 +365,15 @@ vk::Pipeline SceneTargets::ResamplePipeline(vk::Format format, bool stencil) {
                                                              *depth_stencil_frag) : *depth_frag,
                                           .pName = "main"},
     };
-    const vk::PipelineRenderingCreateInfo rendering{
-        .depthAttachmentFormat = format,
-        .stencilAttachmentFormat = stencil ? format : vk::Format::eUndefined,
-    };
+    const auto depth_aspects =
+        vk::ImageAspectFlagBits::eDepth |
+        (stencil ? vk::ImageAspectFlags{vk::ImageAspectFlagBits::eStencil}
+                 : vk::ImageAspectFlags{});
+    auto render_pass = CreateLegacyRenderPass(
+        instance.GetDevice(), std::span<const vk::Format>{},
+        std::span<const vk::SampleCountFlagBits>{}, format,
+        vk::SampleCountFlagBits::e1, {}, vk::ImageLayout::eDepthStencilAttachmentOptimal,
+        depth_aspects);
     const vk::PipelineColorBlendStateCreateInfo color_blending{};
     const vk::PipelineViewportStateCreateInfo viewport_info{};
     const vk::PipelineVertexInputStateCreateInfo vertex_input{};
@@ -380,7 +384,7 @@ vk::Pipeline SceneTargets::ResamplePipeline(vk::Format format, bool stencil) {
         .pViewportState = &viewport_info, .pRasterizationState = &raster,
         .pMultisampleState = &multisampling, .pDepthStencilState = &depth_state,
         .pColorBlendState = &color_blending, .pDynamicState = &dynamic_info,
-        .layout = *resample_layout,
+        .layout = *resample_layout, .renderPass = *render_pass, .subpass = 0,
     }));
     const auto result = *pipeline;
     resample_pipelines.emplace_back(key, std::move(pipeline));
