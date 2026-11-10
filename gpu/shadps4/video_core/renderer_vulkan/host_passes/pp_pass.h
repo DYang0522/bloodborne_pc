@@ -29,6 +29,7 @@ public:
 
 private:
     Scheduler* scheduler{};
+    vk::UniqueRenderPass render_pass{};
     vk::UniquePipeline pipeline{};
     vk::UniquePipelineLayout pipeline_layout{};
     vk::UniqueDescriptorSetLayout desc_set_layout{};
