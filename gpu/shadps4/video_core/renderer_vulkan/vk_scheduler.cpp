@@ -464,9 +464,17 @@ void Scheduler::Wait(u64 tick) {
     }
     BbStats::WaitTimer timer{BbStats::tick_wait_ns};
     work_semaphore.Wait(tick);
+    PopPendingOperations();
 }
 
 void Scheduler::PopPendingOperations() {
+    if (!pending_render_targets.empty()) {
+        work_semaphore.Refresh();
+        while (!pending_render_targets.empty() &&
+               work_semaphore.IsFree(pending_render_targets.front().tick)) {
+            pending_render_targets.pop_front();
+        }
+    }
     if (num_pending_ops.load(std::memory_order_acquire) == 0) {
         return; // every draw comes here
     }
@@ -578,6 +586,10 @@ void Scheduler::SubmitExecution(SubmitInfo& info) {
     }
     ASSERT_MSG(submit_result != vk::Result::eErrorDeviceLost, "Device lost during submit");
 
+    if (!render_targets.empty()) {
+        pending_render_targets.push_back({signal_value, std::move(render_targets)});
+        render_targets.clear();
+    }
     work_semaphore.Refresh();
     AllocateWorkerCommandBuffers();
 
