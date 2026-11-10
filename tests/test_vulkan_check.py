@@ -152,7 +152,7 @@ class UnseenCardTests(unittest.TestCase):
         result = V.evaluate(V13, [gtx, vega])
         self.assertEqual(result['device']['name'], 'AMD Radeon(TM) Vega 8 Graphics')
         self.assertEqual(result['held_back'], [{'name': 'NVIDIA GeForce GTX 1060 6GB',
-                                                'missing': list(V.VULKAN_12_EXTENSIONS)}])
+                                                'missing': ['Vulkan 1.2 (1.1.0)', *V.VULKAN_12_EXTENSIONS]}])
         self.assertEqual(result['unseen'], [])  # Vulkan sees it
         # The game on a discrete card: nothing held back to say.
         self.assertNotIn('held_back', V.evaluate(V13, [card('GeForce RTX 3060'), vega]))
