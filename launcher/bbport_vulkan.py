@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Select Vulkan ICDs for the packaged port before starting GTK or the game.
 
-Mesa comes with the package. NVIDIA's userspace driver must come from the host,
-matching its kernel module. Expose only NVIDIA libraries, rather than the host's
-whole library directory (which would also replace the package's libc/GTK/SDL).
+AMD/Intel Mesa ICDs and the Vulkan loader come from the host, so RADV matches
+the host kernel driver. NVIDIA's userspace driver also comes from the host,
+matching its kernel module. Never bundle a GPU driver in this AppImage.
 """
 
 import hashlib

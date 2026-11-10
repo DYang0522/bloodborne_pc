@@ -1,6 +1,4 @@
-# Linux AppImage workflow, following the build stages used by the gow3 project.
-# Keep Bloodborne's own Nix environment, build script and AppImage bundler:
-# the two projects have different dependencies and packaging implementations.
+# Ubuntu 24.04 AppDir packaging, following the proven GoW3 workflow.
 name: Linux AppImage
 
 on:
@@ -24,6 +22,14 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install GTK and Python runtime inputs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            binutils curl file gcc python3.12 python3-gi python3-pil \
+            gir1.2-gtk-4.0 gir1.2-adw-1 libgtk-4-1 libadwaita-1-0 \
+            adwaita-icon-theme hicolor-icon-theme librsvg2-common fonts-dejavu-core
+
       - name: Dependencies
         uses: cachix/install-nix-action@v31
         with:
@@ -40,12 +46,11 @@ jobs:
 
       - name: Build and native tests
         run: |
-          # The runtime tests create this directory and currently do not create its parent.
           mkdir -p "$HOME/.local/share/shadPS4"
           bash build.sh --test
 
       - name: AppImage
-        run: nix-shell shell.nix --run "bash packaging/appimage.sh"
+        run: bash packaging/appimage.sh
 
       - uses: actions/upload-artifact@v4
         with:
