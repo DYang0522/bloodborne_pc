@@ -11,7 +11,7 @@ from unittest import mock
 import vulkan_check as V
 
 RENDERER = ROOT / 'gpu' / 'shadps4' / 'video_core' / 'renderer_vulkan'
-V12, V13, V14 = (1 << 22) | (2 << 12), V.API, (1 << 22) | (4 << 12)
+V11, V12, V13, V14 = (1 << 22) | (1 << 12), V.API, V.VULKAN_13, (1 << 22) | (4 << 12)
 
 
 def card(name='Card', api=V13, kind=V.DISCRETE, memory=8 << 30, extensions=V.REQUIRED_EXTENSIONS, features=None,
@@ -43,8 +43,10 @@ class RendererListTests(unittest.TestCase):
         features = re.findall(r'ASSERT_MSG\(robustness2_features\.(\w+),', instance)
         self.assertEqual(tuple(features), V.REQUIRED_FEATURES)
         # Nothing else the renderer calls required that the check does not know about.
+        self.assertTrue(all(name in instance for name in V.VULKAN_12_EXTENSIONS))
         self.assertEqual(len(re.findall(r'"Required Vulkan (?:extension|feature) unavailable', instance)),
-                         len(V.REQUIRED_EXTENSIONS) + len(V.REQUIRED_FEATURES))
+                         len(V.REQUIRED_EXTENSIONS) + len(V.VULKAN_12_EXTENSIONS) +
+                         len(V.REQUIRED_FEATURES) + 3)
 
     def test_the_same_choice_of_card_as_the_renderer(self):
         instance = (RENDERER / 'vk_instance.cpp').read_text(encoding='utf-8')
@@ -61,15 +63,23 @@ class VerdictTests(unittest.TestCase):
 
     def test_no_driver_or_an_old_loader(self):
         self.assertEqual(V.evaluate(None, [])['problem'], 'loader')
-        self.assertEqual(V.evaluate(V12, [])['problem'], 'loader_version')
+        self.assertEqual(V.evaluate(V11, [])['problem'], 'loader_version')
+        self.assertEqual(V.evaluate(V12, [])['problem'], 'devices')
         self.assertEqual(V.evaluate(V13, [])['problem'], 'devices')
+
+    def test_vulkan_12_with_the_compatibility_extensions(self):
+        extensions = (*V.REQUIRED_EXTENSIONS, *V.VULKAN_12_EXTENSIONS)
+        result = V.evaluate(V12, [card(api=V12, extensions=extensions)])
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['device']['missing'], [])
 
     def test_what_a_card_lacks_is_named(self):
         old = card('Old card', api=V12, extensions=['VK_KHR_swapchain'])
         result = V.evaluate(V13, [old])
         self.assertEqual(result['problem'], 'device')
-        self.assertEqual(result['device']['missing'], ['Vulkan 1.3 (1.2.0)', 'VK_KHR_push_descriptor',
-                                                       'VK_EXT_vertex_attribute_divisor', 'VK_EXT_robustness2'])
+        self.assertEqual(result['device']['missing'], ['VK_KHR_push_descriptor',
+                                                       'VK_EXT_vertex_attribute_divisor', 'VK_EXT_robustness2',
+                                                       *V.VULKAN_12_EXTENSIONS])
         partial = card(features={'robustBufferAccess2': True, 'robustImageAccess2': True, 'nullDescriptor': False})
         self.assertEqual(V.evaluate(V13, [partial])['device']['missing'], ['nullDescriptor'])
 
@@ -128,7 +138,7 @@ class UnseenCardTests(unittest.TestCase):
         result = V.evaluate(V13, [gtx, vega])
         self.assertEqual(result['device']['name'], 'AMD Radeon(TM) Vega 8 Graphics')
         self.assertEqual(result['held_back'], [{'name': 'NVIDIA GeForce GTX 1060 6GB',
-                                                'missing': ['Vulkan 1.3 (1.2.0)']}])
+                                                'missing': list(V.VULKAN_12_EXTENSIONS)}])
         self.assertEqual(result['unseen'], [])  # Vulkan sees it
         # The game on a discrete card: nothing held back to say.
         self.assertNotIn('held_back', V.evaluate(V13, [card('GeForce RTX 3060'), vega]))
