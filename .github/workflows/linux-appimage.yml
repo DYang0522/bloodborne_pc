@@ -1,3 +1,6 @@
+# Linux AppImage workflow, following the build stages used by the gow3 project.
+# Keep Bloodborne's own Nix environment, build script and AppImage bundler:
+# the two projects have different dependencies and packaging implementations.
 name: Linux AppImage
 
 on:
@@ -21,7 +24,7 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install Nix
+      - name: Dependencies
         uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
@@ -32,16 +35,16 @@ jobs:
           nix-channel --add https://nixos.org/channels/nixpkgs-unstable nixpkgs
           nix-channel --update
 
-      - name: Prepare optional shader directory
-        run: mkdir -p fsr4_shaders
-
       - name: Hardware-check tests
         run: PYTHONPATH=tests:scripts python3 tests/test_launcher_hardware.py
 
-      - name: Build Linux game and run native tests
-        run: bash build.sh --test
+      - name: Build and native tests
+        run: |
+          # The runtime tests create this directory and currently do not create its parent.
+          mkdir -p "$HOME/.local/share/shadPS4"
+          bash build.sh --test
 
-      - name: Build AppImage
+      - name: AppImage
         run: nix-shell shell.nix --run "bash packaging/appimage.sh"
 
       - uses: actions/upload-artifact@v4
