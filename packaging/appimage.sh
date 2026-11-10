@@ -8,15 +8,20 @@ set -euo pipefail
 cd -- "$(dirname -- "$0")/.."
 [[ -f out/bb-probe && -f out/gpu/libbbgpu.so ]] || { echo 'Build first: bash build.sh' >&2; exit 1; }
 root=$PWD
-# The libraries' store paths (RUNPATH entries and their closures come along).
-# Print the exact inputs and their closure sizes so unexpectedly large bundles are diagnosable.
+# Include only Nix store packages that actually satisfy ELF DT_NEEDED dependencies.
+# RUNPATH contains search directories, not a list of required libraries: treating every entry as
+# a dependency pulls build-only packages into the AppImage (and can inflate it by hundreds of MB).
 {
     echo '['
     for elf in out/bb-probe out/gpu/libbbgpu.so; do
-        echo "===== Dynamic paths: $elf =====" >&2
-        readelf -d "$elf" | grep -E 'RPATH|RUNPATH' >&2 || true
-        readelf -d "$elf" | sed -n 's/.*\[\(.*\)\]/\1/p' | tr ':' '\n'
-    done | grep -o '^/nix/store/[^/]*' | sort -u | grep -v -- '-nix-shellwork=$(mktemp -d)
+        ldd "$elf"
+    done | awk '
+        $2 == "=>" && $3 ~ /^\// { print $3 }
+        $1 ~ /^\// { print $1 }
+    ' | grep '^/nix/store/' | sed -E 's#^(/nix/store/[^/]+).*#\1#' | sort -u | sed 's/.*/  "&"/'
+    echo ']'
+} > packaging/runtime-paths.nix
+work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 (cd "$work" && nix bundle --impure --bundler github:ralismark/nix-appimage \
     --expr "import $root/packaging {}")
