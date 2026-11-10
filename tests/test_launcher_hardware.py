@@ -156,19 +156,27 @@ class PlayersPcTests(unittest.TestCase):
                          ('1920x1080', 'fsr3', '3', '30'))
         self.assertEqual(settings['model_lod'], '1')
 
-    def test_no_vulkan_1_3_still_stops_the_port(self):
+    def test_no_vulkan_1_2_still_stops_the_port(self):
         r = rate_detected('NVIDIA GeForce GTX 780', 3, 'AMD Ryzen 7 5800X 8-Core Processor', 32)
         self.assertEqual(r.gpu.id, 'nvidia-gtx-780')
         self.assertEqual((r.tier, r.tier_label, r.summary), (0, 'Not supported', hardware.SUMMARIES[0]))
-        self.assertIn(('bad', 'gpu', 'Not supported: no Vulkan 1.3 driver for this card.'), r.checks)
+        self.assertIn(('bad', 'gpu', 'Not supported: no compatible Vulkan 1.2 driver for this card.'), r.checks)
         self.assertEqual(set(r.levels.values()), {0})
+
+    def test_r9_290x_can_use_the_vulkan_12_compatibility_path(self):
+        r = rate_detected('AMD Radeon R9 200 Series', 4, 'AMD Ryzen 7 5800X 8-Core Processor', 32)
+        self.assertEqual(r.gpu.id, 'amd-r9-290-290x')
+        self.assertFalse(r.gpu.vulkan13 if hasattr(r.gpu, 'vulkan13') else False)
+        self.assertTrue(r.gpu.vulkan12)
+        self.assertEqual(r.tiers['gpu'], 2)
+        self.assertNotIn('bad', [state for state, part, _text in r.checks if part == 'gpu'])
 
     def test_only_what_stops_the_port_rates_a_pc_unsupported(self):
         cpu = hardware.cpu_from_name('AMD Ryzen 7 5800X 8-Core Processor')
         for card in hardware.GPU_LIST:
             for ram in (4, 8, 12, 16):
                 r = hardware.assess(card, cpu, ram)
-                blocked = not card.vulkan13 or card.score < 25
+                blocked = not card.vulkan12 or card.score < 25
                 self.assertEqual(r.tier == 0, blocked, (card.label, ram))
                 self.assertEqual(r.levels['1080p'] > 0, not blocked, (card.label, ram))
 
@@ -196,7 +204,7 @@ class ProfileTests(unittest.TestCase):
 
     def test_dlss_only_on_a_geforce(self):
         for card in hardware.GPU_LIST:
-            if not card.vulkan13:
+            if not card.vulkan12:
                 continue
             r = hardware.assess(card, hardware.cpu_from_name('AMD Ryzen 7 5800X'), 32)
             if r.tier == 0:
