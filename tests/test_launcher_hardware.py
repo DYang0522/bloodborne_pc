@@ -112,7 +112,7 @@ def rate_detected(vulkan_name, vram, cpu, ram):
 
 class PlayersPcTests(unittest.TestCase):
     """PCs that run the game, rated "This PC can't run the port." since 1.9.3: under 12 GB of RAM and
-    under 4 GB of video memory counted as unsupported. Both are below the minimum; only no Vulkan 1.3,
+    under 4 GB of video memory counted as unsupported. Both are below the minimum; only no compatible Vulkan 1.2,
     a card far too slow or a processor without AVX stop the port."""
 
     def assertRunsBelowTheMinimum(self, r, limit):
@@ -166,7 +166,6 @@ class PlayersPcTests(unittest.TestCase):
     def test_r9_290x_can_use_the_vulkan_12_compatibility_path(self):
         r = rate_detected('AMD Radeon R9 200 Series', 4, 'AMD Ryzen 7 5800X 8-Core Processor', 32)
         self.assertEqual(r.gpu.id, 'amd-r9-290-290x')
-        self.assertFalse(r.gpu.vulkan13 if hasattr(r.gpu, 'vulkan13') else False)
         self.assertTrue(r.gpu.vulkan12)
         self.assertEqual(r.tiers['gpu'], 2)
         self.assertNotIn('bad', [state for state, part, _text in r.checks if part == 'gpu'])
