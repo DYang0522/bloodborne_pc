@@ -866,6 +866,10 @@ public:
         return work_semaphore.IsFree(tick);
     }
 
+    /// Allocates and updates a descriptor set that remains valid until its pool is retired.
+    vk::DescriptorSet AllocateDescriptorSet(vk::DescriptorSetLayout layout,
+                                             std::span<const vk::WriteDescriptorSet> writes);
+
     /// Returns the scheduler timeline semaphore.
     [[nodiscard]] Semaphore* GetWorkSemaphore() noexcept {
         return &work_semaphore;
@@ -907,6 +911,7 @@ private:
     vk::Queue execution_queue;
     Semaphore work_semaphore;
     CommandPool command_pool;
+    DescriptorHeap descriptor_heap;
     DynamicState dynamic_state;
     SubmitFunc on_submit{};
     vk::CommandBuffer current_cmdbuf;
