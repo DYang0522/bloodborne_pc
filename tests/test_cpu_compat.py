@@ -730,10 +730,19 @@ class AllocatorSpanTests(unittest.TestCase):
                 data = self.fixture()
                 data['image'] = bytearray(self.base_image)
                 data['image'][address] ^= 1
-                self.reject(data)
+                with patch.dict(os.environ, {'BB_LEGACY_CPU_ALLOW_PARTIAL': '1'}):
+                    _, _, report = cpu_compat.patch_image(**data)
+                if address == span[0] + 4:
+                    self.assertEqual(report['span_patches'], 3)
+                    self.assertEqual(len(report['skipped_sites']), 1)
+                else:
+                    self.assertEqual(report['span_patches'], 0)
+                    self.assertEqual(len(report['skipped_sites']), 4)
         data = self.fixture()
         data['main']['sha256'] = data['plan']['modules']['eboot.bin'] = 'b' * 64
-        self.reject(data)
+        with patch.dict(os.environ, {'BB_LEGACY_CPU_ALLOW_PARTIAL': '1'}):
+            _, _, report = cpu_compat.patch_image(**data)
+        self.assertEqual(report['span_patches'], 4)
         data = self.fixture()
         data['image'] = self.translated
         data['segments'] = self.segments
