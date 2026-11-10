@@ -2913,6 +2913,11 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
             attachment.image_view = target.view;
             attachment.image_layout = target.layout;
         }
+        attachment.format = static_cast<u32>(image_view.info.format);
+        attachment.samples = static_cast<u32>(
+            (reduced || color_redirected)
+                ? vk::SampleCountFlagBits::e1
+                : LiverpoolToVK::NumSamples(key.color_samples[cb], instance.GetColorSampleCounts()));
         image->usage.render_target = 1u;
         if (cb == 0 && upscaler->Enabled()) {
             color_redirected = upscaler->RedirectColor(image_id, desc.view_info, redirect);
@@ -2987,6 +2992,11 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
             attachment.image_view = target.view;
             attachment.image_layout = target.layout;
         }
+        attachment.format = static_cast<u32>(image_view.info.format);
+        attachment.samples = static_cast<u32>(
+            (reduced || depth_redirected)
+                ? vk::SampleCountFlagBits::e1
+                : LiverpoolToVK::NumSamples(key.depth_samples, instance.GetDepthSampleCounts()));
         image.usage.depth_target = true;
         if (upscaler->Enabled()) {
             VulkanUpscalerTarget depth_redirect;
