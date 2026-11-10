@@ -145,7 +145,7 @@ GPUS = [
     ('amd', 'AMD Radeon', 'RX 560', 4, 32, ''),
     ('amd', 'AMD Radeon', 'RX 550', 2, 20, ''),
     ('amd', 'AMD Radeon', 'R9 390 / 390X', 8, 60, 'no-vulkan13'),
-    ('amd', 'AMD Radeon', 'R9 290 / 290X', 4, 52, 'no-vulkan13'),
+    ('amd', 'AMD Radeon', 'R9 290 / 290X', 4, 52, ''),
     ('amd', 'AMD Radeon', 'R9 380 / 285', 4, 42, 'no-vulkan13'),
     ('amd', 'AMD Radeon', 'R9 280 / 280X / HD 7970', 3, 40, 'no-vulkan13'),
     ('amd', 'AMD Radeon (laptop)', 'RX 7600M XT', 8, 110, 'laptop'),
