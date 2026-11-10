@@ -542,6 +542,8 @@ def patch_image(image, segments, main, modules, relocations, *, plan=None, activ
             raise ValueError('Legacy CPU unhandled site has no instruction description.')
     semantic_risk = sum(item['instruction'].split(' ', 1)[0] in ('lzcnt', 'tzcnt')
                         for item in plan['unhandled'])
+    semantic_risk += sum(item['instruction'].split(' ', 1)[0] in ('lzcnt', 'tzcnt')
+                         for item in skipped_sites)
     partial = partial_allowed()
     if span_reports and not partial:
         raise ValueError('Legacy CPU count spans are experimental: global indirect entries are unproven. '
