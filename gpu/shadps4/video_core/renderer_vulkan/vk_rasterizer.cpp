@@ -2915,7 +2915,7 @@ RenderState Rasterizer::BeginRenderingFull(const GraphicsPipeline* pipeline) {
         }
         attachment.format = static_cast<u32>(image_view.info.format);
         attachment.samples = static_cast<u32>(
-            (reduced || color_redirected)
+            (reduced || color_redirected || !key.color_samples[cb])
                 ? vk::SampleCountFlagBits::e1
                 : LiverpoolToVK::NumSamples(key.color_samples[cb], instance.GetColorSampleCounts()));
         image->usage.render_target = 1u;
