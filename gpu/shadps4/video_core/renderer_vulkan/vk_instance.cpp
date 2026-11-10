@@ -78,12 +78,15 @@ vk::FormatProperties3 GetFormatProperties(vk::PhysicalDevice physical, vk::Forma
     if (!supports_format_feature_flags2) {
         // Vulkan 1.2 without VK_KHR_format_feature_flags2 still exposes the original
         // 32-bit format flags. They map directly to the low bits of FormatFeatureFlags2.
-        properties3.linearTilingFeatures =
-            vk::FormatFeatureFlags2{static_cast<VkFormatFeatureFlags2>(static_cast<VkFormatFeatureFlags>(properties2.formatProperties.linearTilingFeatures))};
-        properties3.optimalTilingFeatures =
-            vk::FormatFeatureFlags2{static_cast<VkFormatFeatureFlags2>(static_cast<VkFormatFeatureFlags>(properties2.formatProperties.optimalTilingFeatures))};
-        properties3.bufferFeatures =
-            vk::FormatFeatureFlags2{static_cast<VkFormatFeatureFlags2>(static_cast<VkFormatFeatureFlags>(properties2.formatProperties.bufferFeatures))};
+        properties3.linearTilingFeatures = vk::FormatFeatureFlags2{
+            static_cast<VkFormatFeatureFlags2>(
+                static_cast<VkFormatFeatureFlags>(properties2.formatProperties.linearTilingFeatures))};
+        properties3.optimalTilingFeatures = vk::FormatFeatureFlags2{
+            static_cast<VkFormatFeatureFlags2>(
+                static_cast<VkFormatFeatureFlags>(properties2.formatProperties.optimalTilingFeatures))};
+        properties3.bufferFeatures = vk::FormatFeatureFlags2{
+            static_cast<VkFormatFeatureFlags2>(
+                static_cast<VkFormatFeatureFlags>(properties2.formatProperties.bufferFeatures))};
     }
     return properties3;
 }
@@ -94,7 +97,8 @@ std::unordered_map<vk::Format, vk::FormatProperties3> GetFormatProperties(
     for (const auto& format_info : LiverpoolToVK::SurfaceFormats()) {
         const auto format = format_info.vk_format;
         if (!format_properties.contains(format)) {
-            format_properties.emplace(format, GetFormatProperties(physical, format, supports_format_feature_flags2));
+            format_properties.emplace(
+                format, GetFormatProperties(physical, format, supports_format_feature_flags2));
         }
     }
     for (const auto& format_info : LiverpoolToVK::DepthFormats()) {
