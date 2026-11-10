@@ -54,6 +54,8 @@ def missing(device):
         lacking += [name for name in VULKAN_12_EXTENSIONS if name not in device['extensions']]
     if 'VK_EXT_robustness2' in device['extensions']:
         lacking += [name for name in REQUIRED_FEATURES if not device['features'].get(name)]
+    if device['api'] >= VULKAN_13 or all(name in device['extensions'] for name in VULKAN_12_EXTENSIONS):
+        lacking += [name for name in VULKAN_12_FEATURES if not device['features'].get(name)]
     return lacking
 
 
