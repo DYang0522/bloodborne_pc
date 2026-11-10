@@ -351,7 +351,7 @@ if (WIN32)
     # The guest main thread runs on the process stack: 16 MiB, committed (no stack probes).
     # Keep the final static link within the Windows runner's memory budget and retain an
     # LLD reproduction archive if this one large executable link fails.
-    target_link_options(bb-probe PRIVATE -Wl,--disable-high-entropy-va -Wl,--threads=1
+    target_link_options(bb-probe PRIVATE -fuse-ld=lld-link -Wl,--disable-high-entropy-va -Wl,--threads=1
         "-Wl,--reproduce=${CMAKE_BINARY_DIR}/../gpu-build.log"
         "SHELL:-Xlinker --stack -Xlinker 16777216,16777216")
     add_executable(bb-gpu-capabilities ../tools/gpu_capabilities.c ../tools/fsr411_capabilities.cpp
