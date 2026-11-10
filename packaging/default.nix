@@ -86,7 +86,11 @@ pkgs.stdenv.mkDerivation {
     d=$out/share/bbport
     mkdir -p $d/bin $out/bin
     cp run.sh run.py $d/ # scripts/linux_start.py uses run.py's start steps
-    cp -r scripts patches fsr4_shaders launcher $d/
+    cp -r scripts patches launcher $d/
+    # FSR 4 shader assets are optional and may be absent in CI or clean public checkouts.
+    if [ -d fsr4_shaders ]; then
+      cp -r fsr4_shaders $d/
+    fi
     # FSR 4.1.1 models only with BB_PACKAGE_FSR411=1 (see above); otherwise run.sh finds them in
     # the data directory (~/.local/share/bbport/fsr4_411).
     if [ -d fsr4_411 ]; then
