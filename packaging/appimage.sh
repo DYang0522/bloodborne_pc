@@ -75,7 +75,19 @@ bundle() {
         [[ -n $lib && -f $lib ]] || continue
         name=$(basename "$lib")
         [[ $name =~ $excluded ]] && continue
-        if [[ -e "$libdir/$name" ]]; then
+        if [[ $name == "libstdc++.so.6" ]]; then
+            # Prefer the Nix runtime used by the compiled GPU/probe binaries.
+            # Ubuntu's GTK/Python stack may expose another libstdc++ with the
+            # same SONAME; replacing it with the build runtime is ABI-safe
+            # (newer libstdc++ remains backward compatible).
+            if [[ $lib == /nix/store/* ]]; then
+                if [[ ! -e "$libdir/$name" ]] || [[ $(readlink -f "$libdir/$name") != "$(readlink -f "$lib")" ]]; then
+                    cp -Lf "$lib" "$libdir/$name"
+                fi
+            elif [[ ! -e "$libdir/$name" ]]; then
+                cp -L "$lib" "$libdir/$name"
+            fi
+        elif [[ -e "$libdir/$name" ]]; then
             existing=$(readlink -f "$libdir/$name")
             if [[ $existing != "$(readlink -f "$lib")" ]] && ! cmp -s "$libdir/$name" "$lib"; then
                 echo "Conflicting runtime library name: $name ($existing vs $lib)" >&2
