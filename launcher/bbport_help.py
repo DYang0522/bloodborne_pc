@@ -152,7 +152,7 @@ TOPICS = {
          'Close your browser and other programs while playing.']),
     'driver': (
         'The graphics driver stopped (device lost)',
-        'The game needs Vulkan 1.3 and a current driver; an old or crashed driver ends the game with '
+        'The game needs Vulkan 1.2 with its required extensions and a current driver; an old or crashed driver ends the game with '
         '"device lost".',
         ['Update the driver: NVIDIA App, AMD Software (Adrenalin) or Intel Driver & Support Assistant.',
          'Restart the PC after installing it.',
@@ -1099,7 +1099,7 @@ class HelpMixin:
 
     def gpu_problem(self):
         """Why the game's renderer would not start on this PC, or None: scripts/vulkan_check.py asks the
-        graphics driver for what the renderer needs (a Vulkan 1.3 loader and card, its extensions and
+        graphics driver for what the renderer needs (a Vulkan 1.2 loader and card, plus the required extensions and
         features) on the card the game would use. No list of card names: the driver's own answer."""
         verdict = getattr(self, 'vulkan', None) or {}
         problem, device = verdict.get('problem'), verdict.get('device') or {}
@@ -1109,10 +1109,10 @@ class HelpMixin:
             return _('No working Vulkan driver was found (vulkan-1.dll is missing or broken). Install the current '
                      'driver for your graphics card.')
         if problem == 'loader_version':
-            return _('The Vulkan files of the graphics driver are too old ({} of the 1.3 the port needs). Install '
+            return _('The Vulkan files of the graphics driver are too old ({} of the 1.2 the port needs). Install '
                      'the current driver for your graphics card.').format(verdict.get('loader'))
         if problem == 'devices':
-            return _('No graphics card with Vulkan 1.3 was found. The port needs one (GTX 1050 Ti, GTX 1650, RX 570 '
+            return _('No graphics card with Vulkan 1.2 and the required extensions was found. The port needs a compatible card and driver '
                      'or newer) with a current driver.')
         if problem == 'device':
             lacks = ', '.join(device.get('missing', []))  # its names in Vulkan's words: what to search for
