@@ -725,29 +725,25 @@ Frame* Presenter::PrepareBlankFrame(bool present_thread) {
         .subresourceRange = simple_subresource,
     };
 
-    const vk::RenderingAttachmentInfo attachment = {
-        .imageView = frame->image_view,
-        .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-        .loadOp = vk::AttachmentLoadOp::eClear,
-        .storeOp = vk::AttachmentStoreOp::eStore,
-    };
-    const vk::RenderingInfo rendering_info = {
-        .renderArea =
-            {
-                .extent = {frame->width, frame->height},
-            },
-        .layerCount = 1,
-        .colorAttachmentCount = 1u,
-        .pColorAttachments = &attachment,
-    };
+    RenderState render_state{};
+    render_state.width = static_cast<u16>(frame->width);
+    render_state.height = static_cast<u16>(frame->height);
+    render_state.num_layers = 1;
+    render_state.num_color_attachments = 1;
+    auto& color_attachment = render_state.color_attachments[0];
+    color_attachment.image_view = frame->image_view;
+    color_attachment.image_layout = vk::ImageLayout::eColorAttachmentOptimal;
+    color_attachment.format = static_cast<u32>(FrameGenerator::ColorFormat);
+    color_attachment.samples = static_cast<u32>(vk::SampleCountFlagBits::e1);
+    color_attachment.is_clear = 1;
 
     cmdbuf.pipelineBarrier2(vk::DependencyInfo{
         .imageMemoryBarrierCount = 1,
         .pImageMemoryBarriers = &pre_barrier,
     });
 
-    cmdbuf.beginRendering(rendering_info);
-    cmdbuf.endRendering();
+    scheduler.BeginRendering(render_state);
+    scheduler.EndRendering();
 
     cmdbuf.pipelineBarrier2(vk::DependencyInfo{
         .imageMemoryBarrierCount = 1,
