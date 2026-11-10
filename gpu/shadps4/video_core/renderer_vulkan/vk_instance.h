@@ -59,7 +59,10 @@ public:
 
     /// Largest VkBuffer the driver allows (2 GiB on AMD's Windows driver).
     u64 GetMaxBufferSize() const {
-        return vk13_props.maxBufferSize;
+        // VK_KHR_maintenance4 is optional on Vulkan 1.2. The legacy limit is a
+        // conservative cap for storage-buffer arenas when maxBufferSize is unavailable.
+        return vk13_props.maxBufferSize ? vk13_props.maxBufferSize
+                                        : properties.limits.maxStorageBufferRange;
     }
 
     vk::PhysicalDevice GetPhysicalDevice() const {
