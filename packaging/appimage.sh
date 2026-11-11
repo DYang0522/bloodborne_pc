@@ -159,6 +159,8 @@ while IFS= read -r -d '' elf; do
     file -b "$elf" | grep -q '^ELF' || continue
     rpath=$($system_patchelf --print-rpath "$elf" 2>/dev/null || true)
     [[ $rpath == *"/nix/store/"* ]] || continue
+    # cp -a may preserve read-only mode bits from /usr/lib. patchelf rewrites in place.
+    chmod u+w "$elf"
     IFS=: read -r -a entries <<< "$rpath"
     kept=()
     for entry in "${entries[@]}"; do
