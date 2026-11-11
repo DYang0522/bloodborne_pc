@@ -20,7 +20,7 @@ let
   # Only what the package needs (the tree also holds builds, profiles and captures).
   wanted = [
     "run.sh" "run.py" "out" "out/bb-probe" "out/bb-gpu-capabilities" "out/gpu" "out/gpu/libbbgpu.so"
-    "tools/legacy-cpu-plan.json"
+    "tools" "tools/legacy-cpu-plan.json"
   ] ++ assetDirs;
   src = builtins.path {
     name = "bbport-src";
