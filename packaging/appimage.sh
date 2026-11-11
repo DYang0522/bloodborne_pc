@@ -2,6 +2,14 @@
 # AppDir + recursive ldd + appimagetool, following the working GoW3 package.
 # GTK/Python are bundled. glibc, Vulkan, GPU drivers and display libraries stay host-provided.
 set -euo pipefail
+# The build uses Nix, but this AppDir deliberately targets Ubuntu 24.04's glibc and GTK.
+# Do not let the Nix build environment choose host-library dependencies during packaging.
+unset LD_LIBRARY_PATH LD_PRELOAD LD_AUDIT NIX_LD NIX_LD_LIBRARY_PATH
+system_ldd=/usr/bin/ldd
+system_patchelf=/usr/bin/patchelf
+[[ -x $system_ldd ]] || { echo "Missing Ubuntu dependency resolver: $system_ldd" >&2; exit 1; }
+[[ -x $system_patchelf ]] || { echo "Missing Ubuntu patchelf: $system_patchelf" >&2; exit 1; }
+echo "Dependency resolver: $system_ldd"
 cd -- "$(dirname -- "$0")/.."
 [[ -f out/bb-probe && -f out/gpu/libbbgpu.so ]] || { echo 'Build first: bash build.sh' >&2; exit 1; }
 
@@ -116,12 +124,24 @@ bundle() {
             bundle_lib="$libdir/$name"
         fi
         bundle "$bundle_lib"
-    done < <(ldd "$elf")
+    done < <("$system_ldd" "$elf")
 }
 
+# Seed the AppDir with Ubuntu's complete Python/GTK dependency closure first. Nix-built
+# GPU dependencies are scanned only afterwards, so they cannot replace same-SONAME host GTK
+# libraries with a newer GLib/libdl stack from the Nix store.
+bundle "$appdir/usr/bin/python3"
 while IFS= read -r -d '' elf; do
     if file -b "$elf" | grep -q '^ELF'; then bundle "$elf"; fi
-done < <(find "$appdir/usr/bin" "$appdir/usr/lib/python$pyver/lib-dynload" "$appdir/usr/lib/python3/dist-packages/gi" "$appdir/usr/lib/python3/dist-packages/PIL" "$libdir" "$share/bin" -type f -print0)
+done < <(find "$appdir/usr/lib/python$pyver/lib-dynload" \
+               "$appdir/usr/lib/python3/dist-packages/gi" \
+               "$appdir/usr/lib/python3/dist-packages/PIL" "$libdir" -type f -print0)
+
+# Now add the Nix-built game and GPU library closure. Existing Ubuntu libraries win on
+# SONAME collisions; glibc, the Vulkan loader and graphics drivers are never bundled.
+while IFS= read -r -d '' elf; do
+    if file -b "$elf" | grep -q '^ELF'; then bundle "$elf"; fi
+done < <(find "$share/bin" -type f -print0)
 
 
 find "$libdir" -type f -name '*.so*' -exec strip --strip-unneeded {} + 2>/dev/null || true
@@ -131,13 +151,13 @@ find "$appdir/usr/lib/python$pyver" "$appdir/usr/lib/python3/dist-packages" -typ
 # particular, a Nix glibc libdl loaded beside the host Ubuntu libc causes GLIBC_ABI
 # version conflicts. All non-host dependencies have already been copied to usr/lib,
 # which AppRun adds to LD_LIBRARY_PATH, so discard Nix store RPATH entries.
-command -v patchelf >/dev/null || {
+[[ -x $system_patchelf ]] || {
     echo "Missing patchelf; it is required to remove build-host Nix RPATH entries." >&2
     exit 1
 }
 while IFS= read -r -d '' elf; do
     file -b "$elf" | grep -q '^ELF' || continue
-    rpath=$(patchelf --print-rpath "$elf" 2>/dev/null || true)
+    rpath=$($system_patchelf --print-rpath "$elf" 2>/dev/null || true)
     [[ $rpath == *"/nix/store/"* ]] || continue
     IFS=: read -r -a entries <<< "$rpath"
     kept=()
@@ -146,9 +166,9 @@ while IFS= read -r -d '' elf; do
     done
     if (("${#kept[@]}" > 0)); then
         new_rpath=$(IFS=:; printf '%s' "${kept[*]}")
-        patchelf --set-rpath "$new_rpath" "$elf"
+        $system_patchelf --set-rpath "$new_rpath" "$elf"
     else
-        patchelf --remove-rpath "$elf"
+        $system_patchelf --remove-rpath "$elf"
     fi
 done < <(find "$appdir" -type f -print0)
 
