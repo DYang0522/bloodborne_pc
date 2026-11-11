@@ -673,7 +673,7 @@ void input_config_defaults(InputConfig *out) {
 "\n"
 
 #define DEFAULT_MOUSE \
-"# Mouse (uncomment mouse_to_joystick to turn it on; buttons work only while captured)\n" \
+"# Mouse (enabled by default; buttons work only while captured)\n" \
 "mouse_to_joystick = right\n" \
 "mouse_movement_params = 0.5, 1, 0.125\n"
 
