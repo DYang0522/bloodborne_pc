@@ -151,7 +151,7 @@ fi
 echo "Minimum glibc: ${need:-unknown}"
 du -sh "$appdir"
 
-# Keep Steam's injected overlay out of the bundled GTK/Python process.
+# Keep the Steam overlay out of the bundled GTK/Python process.
 cc -O2 -Wall -Werror -static packaging/bbport-entry.c -o "$appdir/AppRun"
 chmod 755 "$appdir/AppRun"
 install -m755 packaging/linux/AppRun.sh "$appdir/AppRun.sh"
