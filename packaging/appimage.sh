@@ -58,7 +58,7 @@ done
 
 # Copy actual ELF dependencies recursively, while leaving host graphics/display
 # libraries untouched so RADV and the host Vulkan loader remain a matched pair.
-excluded='^(ld-linux.*|libc|libm|libmvec|libdl|librt|libpthread|libresolv|libutil|libnsl|libanl|libvulkan|libGL|libGLX|libGLdispatch|libEGL|libOpenGL|libgbm|libdrm.*|libX11|libX11-xcb|libxcb.*|libXau|libXdmcp|libXext|libXfixes|libXrender|libXi|libXcursor|libXrandr|libwayland-.*|libasound|libudev|libpulse.*|libfontconfig|libfreetype|libOpenCL|libva.*|libvdpau|libvpl|libnvidia-.*|libcuda|libz)\.so(\.[0-9]+)*
+excluded='^(ld-linux.*|libc|libm|libmvec|libdl|librt|libpthread|libresolv|libutil|libnsl|libanl|libvulkan|libGL|libGLX|libGLdispatch|libEGL|libOpenGL|libgbm|libdrm.*|libX11|libX11-xcb|libxcb.*|libXau|libXdmcp|libXext|libXfixes|libXrender|libXi|libXcursor|libXrandr|libwayland-.*|libasound|libudev|libpulse.*|libfontconfig|libfreetype|libOpenCL|libva.*|libvdpau|libvpl|libnvidia-.*|libcuda|libz)\.so(\.[0-9]+)*'
 declare -A seen=()
 bundle() {
     local elf=$1 line lib name resolved existing bundle_lib
