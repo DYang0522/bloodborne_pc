@@ -112,8 +112,13 @@ pkgs.stdenv.mkDerivation {
     # Bundle ALSA plugins and the PipeWire ALSA configuration, but use it only when a
     # logged-in PipeWire session socket is present (AppRun.sh checks this).
     mkdir -p $d/lib/alsa-lib $d/share/alsa $d/etc/alsa/conf.d
-    cp -aL ${pkgs.pipewire}/lib/alsa-lib/. $d/lib/alsa-lib/
-    cp -aL ${pkgs.alsa-plugins}/lib/alsa-lib/. $d/lib/alsa-lib/
+    # Copy files without preserving the read-only directory mode from the Nix store.
+    for plugin_dir in ${pkgs.pipewire}/lib/alsa-lib ${pkgs.alsa-plugins}/lib/alsa-lib; do
+      for plugin in "$plugin_dir"/*; do
+        [ -f "$plugin" ] || continue
+        cp -L "$plugin" "$d/lib/alsa-lib/"
+      done
+    done
     cp -a ${alsaConfig}/share/alsa/alsa.conf $d/share/alsa/alsa.conf
     cp -a ${alsaConfig}/etc/alsa/conf.d/. $d/etc/alsa/conf.d/
     # FSR 4 shader assets are optional and may be absent in CI or clean public checkouts.
