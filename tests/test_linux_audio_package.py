@@ -16,6 +16,9 @@ class LinuxAudioPackageTests(unittest.TestCase):
         self.assertIn("pkgs.alsa-lib", NIX)
         self.assertIn("ALSA_CONFIG_PATH", APPRUN)
         self.assertIn("ALSA_PLUGIN_DIR", APPRUN)
+        self.assertIn('cp -L "$plugin" "$d/lib/alsa-lib/"', NIX)
+        self.assertNotIn("cp -aL ${pkgs.pipewire}/lib/alsa-lib", NIX)
+        self.assertNotIn("cp -aL ${pkgs.alsa-plugins}/lib/alsa-lib", NIX)
 
     def test_appimage_explains_missing_desktop_audio_session(self):
         self.assertIn("XDG_RUNTIME_DIR", APPRUN)
