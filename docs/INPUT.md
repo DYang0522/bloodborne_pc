@@ -78,7 +78,10 @@ key or mouse button.
 
 The Controls page shows three slots per action (the controller's line is the fourth binding):
 click a slot and press a key, click a mouse button or turn the wheel; right-click a slot to
-clear it. Walk (`leftjoystick_halfmode`, the left stick at half) has a row too.
+clear it. Walk (`leftjoystick_halfmode`, the left stick at half) has a row too. The Linux GTK
+launcher provides the same keyboard/mouse and gamepad mappings in its **Controls** tab, including
+a mouse-look enable switch and sensitivity settings. Keyboard, mouse and gamepad remain separate
+input sources that can be used together; they are not mutually exclusive modes.
 
 ## Dark Souls III layout
 
@@ -136,7 +139,9 @@ mouse_to_joystick = right            # left | right; absent = mouse look does no
 mouse_movement_params = 0.5, 1, 0.125   # deadzone_offset (unused, see below), speed, speed_offset
 ```
 
-Mouse motion is smoothed over a short, fixed time window (so a fast flick or a quick 180-degree
+Mouse look is off when the default `mouse_to_joystick` line is commented out. Enable it in the
+launcher's Controls tab (or uncomment the line below); F7 then toggles capture in the game and F8
+reloads the input file. Mouse motion is smoothed over a short, fixed time window (so a fast flick or a quick 180-degree
 turn stays responsive, while small, slow movements don't produce a jumpy camera) and then
 converted into the chosen stick with a formula based on shadPS4's `EmulateJoystick`, normalized
 so the result does not depend on the game's frame rate. `speed` scales sensitivity; `speed_offset`

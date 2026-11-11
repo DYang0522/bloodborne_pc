@@ -11,6 +11,7 @@ EN = {
     "Запустить": "Play",
     "Остановить": "Stop",
     "Настройки": "Settings",
+    "Управление": "Controls",
     "Журнал": "Log",
     "Не удалось запустить: {}": "Could not start: {}",
     "\n— игра завершилась (код {}) —\n": "\n— the game exited (code {}) —\n",
@@ -71,6 +72,12 @@ EN = {
     "Разрешение вывода": "Output resolution",
     "Апскейлер дорисовывает кадр; Steam Deck — 720p": "The upscaler fills the frame; Steam Deck: 720p",
     "Полноэкранный режим": "Fullscreen",
+    "Режим окна": "Window mode",
+    "В окне": "Windowed",
+    "Полноэкранный без рамки": "Borderless fullscreen",
+    "Полноэкранный (эксклюзивный)": "Exclusive fullscreen",
+    "Выберите оконный режим; изменение применяется при следующем запуске игры":
+        "Choose a window mode; it applies the next time the game starts",
     "Смена разрешения на лету": "Live resolution changes",
     "Без перезапуска, но медленнее на Steam Deck и старых GPU":
         "No restart needed, but slower on the Steam Deck and older GPUs",
@@ -236,6 +243,55 @@ EN = {
     "в сети": "online",
     "не в сети": "offline",
     "уровень {}": "level {}",
+    # Linux controls page
+    "Клавиатура, мышь и геймпад": "Keyboard, mouse and gamepad",
+    "Источники управления работают одновременно. Настройки сохраняются при запуске игры.":
+        "Input devices work together. Settings are saved when you start the game.",
+    "Горячие клавиши": "Hotkeys",
+    "включить или выключить захват мыши": "toggle mouse capture",
+    "перезагрузить input.ini": "reload input.ini",
+    "Управление мышью": "Mouse controls",
+    "Курсор захватывается в игре, когда режим мыши включён, окно активно и меню закрыто.":
+        "The game captures the cursor when mouse mode is enabled, the window is focused and the menu is closed.",
+    "Включить управление камерой мышью": "Enable mouse camera",
+    "После запуска можно временно переключать режим клавишей F7":
+        "After launch, F7 temporarily toggles mouse capture",
+    "Какой стик управляет мышью": "Which stick the mouse controls",
+    "Правый стик (камера)": "Right stick (camera)",
+    "Левый стик": "Left stick",
+    "Режим камеры": "Camera mode",
+    "Эмуляция стика": "Emulated stick",
+    "Прямое управление камерой (1:1)": "Direct camera (1:1)",
+    "Чувствительность мыши": "Mouse sensitivity",
+    "Дополнительная чувствительность": "Additional sensitivity",
+    "Чувствительность прямой камеры": "Direct camera sensitivity",
+    "Вертикальная чувствительность": "Vertical sensitivity",
+    "Инвертировать горизонталь": "Invert horizontal axis",
+    "Инвертировать вертикаль": "Invert vertical axis",
+    "Назначения геймпада": "Gamepad bindings",
+    "Выберите физическую кнопку для каждого действия. Стики и триггеры остаются аналоговыми.":
+        "Choose a physical button for each action. Sticks and triggers remain analog.",
+    "Не назначено": "Unassigned",
+    "Переназначение кнопок": "Button remapping",
+    "Нажмите один из слотов, затем клавишу, кнопку мыши или прокрутите колесо. Shift/Ctrl/Alt можно сочетать.":
+        "Click a slot, then press a key, mouse button or scroll the wheel. Shift/Ctrl/Alt combinations are supported.",
+    "Нажмите и введите клавишу, кнопку мыши или прокрутите колесо":
+        "Click, then press a key, mouse button or scroll the wheel",
+    "Очистить назначения этой команды": "Clear this action's bindings",
+    "Нажмите ввод…": "Press an input…",
+    "Ожидание клавиши, кнопки мыши или прокрутки колеса…":
+        "Waiting for a key, mouse button or wheel…",
+    "Эта клавиша не поддерживается; нажмите другую": "Unsupported key; press another key",
+    "Эта кнопка мыши не поддерживается": "Unsupported mouse button",
+    "Эта клавиша зарезервирована системным меню или горячей клавишей":
+        "This key is reserved for the system menu or a hotkey",
+    "Такое сочетание нельзя назначить для этого действия": "This combination cannot be assigned to this action",
+    "Назначение изменено; настройки сохраняются при запуске игры":
+        "Binding changed; settings are saved when the game starts",
+    "Не удалось сохранить управление: {}": "Could not save controls: {}",
+    "Сначала остановите игру, чтобы изменить управление":
+        "Stop the game before changing controls",
+    "Отменить переназначение": "Cancel remapping",
     "Исключить": "Kick",
     "Это сохранения Seamless co-op из Windows (seamless-coop): без BBSC их предметы "
     "показываются как ?GoodsName?. Выберите обычную папку user":

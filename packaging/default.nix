@@ -33,6 +33,25 @@ let
   python = pkgs.python3.withPackages (ps: [ ps.pygobject3 ]);
   # run.sh's scripts: Pillow turns the game's trophy pictures into the pop-up's (run.py write_trophy_icons).
   startPython = pkgs.python3.withPackages (ps: [ ps.pillow ]);
+  # Keep ALSA's PipeWire PCM/CTL plugins and their config with the AppImage. The host's
+  # /etc/alsa/conf.d can point at /usr/lib paths that do not exist inside the AppImage.
+  audioRuntime = [ pkgs.alsa-lib pkgs.alsa-plugins pkgs.pipewire pkgs.libpulseaudio ];
+  alsaConfig = pkgs.runCommand "bbport-alsa-pipewire-config" {} ''
+    mkdir -p $out/share/alsa $out/etc/alsa/conf.d
+    substitute ${pkgs.alsa-lib}/share/alsa/alsa.conf $out/share/alsa/alsa.conf \
+      --replace-fail '"/etc/alsa/conf.d"' \
+        '{ @func getenv vars [ BB_ALSA_CONFIG_DIR ] default "/etc/alsa/conf.d" }'
+    cat > $out/etc/alsa/conf.d/49-pipewire-modules.conf <<'EOF'
+    pcm_type.pipewire {
+      libs.native = ${pkgs.pipewire}/lib/alsa-lib/libasound_module_pcm_pipewire.so ;
+    }
+    ctl_type.pipewire {
+      libs.native = ${pkgs.pipewire}/lib/alsa-lib/libasound_module_ctl_pipewire.so ;
+    }
+    EOF
+    cp ${pkgs.pipewire}/share/alsa/alsa.conf.d/50-pipewire.conf $out/etc/alsa/conf.d/
+    cp ${pkgs.pipewire}/share/alsa/alsa.conf.d/99-pipewire-default.conf $out/etc/alsa/conf.d/
+  '';
   # Mesa comes with the package. bbport_vulkan.py adds the host NVIDIA ICD and
   # only its vendor libraries (matching the host's kernel module).
   icds = lib.concatMapStringsSep ":" (name: "${pkgs.mesa}/share/vulkan/icd.d/${name}")
@@ -62,7 +81,7 @@ let
       --set-default FONTCONFIG_FILE ${fontsConf} \
       --set-default LC_ALL C.UTF-8 \
       --set-default SSL_CERT_FILE ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt \
-      --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ pkgs.libglvnd pkgs.libx11 pkgs.libxext ]} \
+      --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath ([ pkgs.libglvnd pkgs.libx11 pkgs.libxext ] ++ audioRuntime)} \
       --set BB_VULKANINFO ${pkgs.vulkan-tools}/bin/vulkaninfo \
   '';
 in
@@ -71,8 +90,8 @@ pkgs.stdenv.mkDerivation {
   version = "0.1";
   inherit src;
   nativeBuildInputs = [ pkgs.makeShellWrapper pkgs.wrapGAppsHook4 pkgs.gobject-introspection ];
-  buildInputs = [ pkgs.gtk4 pkgs.libadwaita pkgs.adwaita-icon-theme pkgs.librsvg ]
-    ++ map builtins.storePath runtimePaths;
+  buildInputs = [ pkgs.gtk4 pkgs.libadwaita pkgs.adwaita-icon-theme pkgs.librsvg alsaConfig ]
+    ++ audioRuntime ++ map builtins.storePath runtimePaths;
   dontBuild = true;
   dontConfigure = true;
   # The binaries live under share/ (next to the scripts run.sh expects): strip them too, which
@@ -90,6 +109,13 @@ pkgs.stdenv.mkDerivation {
     cp -r scripts patches launcher $d/
     mkdir -p $d/tools
     install -m644 tools/legacy-cpu-plan.json $d/tools/legacy-cpu-plan.json
+    # Bundle ALSA plugins and the PipeWire ALSA configuration, but use it only when a
+    # logged-in PipeWire session socket is present (AppRun.sh checks this).
+    mkdir -p $d/lib/alsa-lib $d/share/alsa $d/etc/alsa/conf.d
+    cp -aL ${pkgs.pipewire}/lib/alsa-lib/. $d/lib/alsa-lib/
+    cp -aL ${pkgs.alsa-plugins}/lib/alsa-lib/. $d/lib/alsa-lib/
+    cp -a ${alsaConfig}/share/alsa/alsa.conf $d/share/alsa/alsa.conf
+    cp -a ${alsaConfig}/etc/alsa/conf.d/. $d/etc/alsa/conf.d/
     # FSR 4 shader assets are optional and may be absent in CI or clean public checkouts.
     if [ -d fsr4_shaders ]; then
       cp -r fsr4_shaders $d/

@@ -19,6 +19,7 @@ from pathlib import Path
 import bbport_linux_online as online
 from bbport_assets import fsr411_problem
 from bbport_i18n import language, set_language, tr
+from bbport_controls import ControlsMixin
 
 import gi
 
@@ -44,6 +45,8 @@ UPSCALERS = [("FSR 4", "fsr4"), ("FSR 4.1.1", "fsr411"), ("FSR 3", "fsr3"),
 PRESETS = [("Native AA", 0), ("Quality (x1.5)", 1), ("Balanced (x1.7)", 2),
            ("Performance (x2)", 3), ("Ultra Performance (x3)", 4)]
 OUTPUT_RES = [("1280×720 (Steam Deck)", "1280x720"), ("1920×1080", "1920x1080"), ("2560×1440", "2560x1440"), ("3840×2160", "3840x2160")]
+WINDOW_MODES = [("В окне", "windowed"), ("Полноэкранный без рамки", "borderless"),
+                ("Полноэкранный (эксклюзивный)", "fullscreen")]
 # Game effects (patches applied at start): bbport.ini key, title, default.
 EFFECTS = [
     ("effect_chromatic_aberration", "Хроматическая аберрация", True),
@@ -87,7 +90,8 @@ DEFAULTS = {
     "mods_enabled": True,
     "patches_dir": "",
     "language": "1",
-    "fullscreen": False,
+    "fullscreen": False,  # legacy setting retained for older saved launcher configurations
+    "window_mode": "windowed",
     "hdr": False,
     "present_mode": "Mailbox",
     "fps_mode": "uncap",
@@ -125,7 +129,10 @@ INI_DEFAULTS = {
 def load_settings():
     settings = dict(DEFAULTS)
     try:
-        settings.update(json.loads(CONFIG_FILE.read_text(encoding='utf-8')))
+        saved = json.loads(CONFIG_FILE.read_text(encoding='utf-8'))
+        settings.update(saved)
+        if "window_mode" not in saved:
+            settings["window_mode"] = "borderless" if saved.get("fullscreen", False) else "windowed"
     except (OSError, ValueError):
         pass
     return settings
@@ -202,7 +209,11 @@ def game_environment(s, log=print):
     env["BB_PATCHES_DIR"] = str(patches_dir(s))
     env["BB_PATCHES_CONFIG"] = str(DATA_DIR / "patches.json")
     env["BB_LANGUAGE"] = s["language"]
-    env["BB_FULLSCREEN"] = "1" if s["fullscreen"] else "0"
+    window_mode = s.get("window_mode")
+    if window_mode not in ("windowed", "borderless", "fullscreen"):
+        window_mode = "borderless" if s.get("fullscreen", False) else "windowed"
+    env["BB_WINDOW_MODE"] = window_mode
+    env["BB_FULLSCREEN"] = "1" if window_mode != "windowed" else "0"
     env["BB_PRESENT_MODE"] = s["present_mode"]
     if s["hdr"]:
         env["BB_HDR"] = "1"
@@ -298,13 +309,14 @@ class FolderList:
         self.rows.append((key, row))
 
 
-class LauncherWindow(Adw.ApplicationWindow):
+class LauncherWindow(ControlsMixin, Adw.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app, title="Bloodborne")
         self.set_default_size(760, 820)
         self.settings = load_settings()
         set_language(self.settings.get("ui_language", ""))
         self.ini, self.ini_lines = load_ini()
+        self.init_controls(ini_path())
         self.process = None
         self.stream = None
         self.run_log = None  # <saves folder>/last_run.log: the game's output, as the Windows launcher keeps it
@@ -335,6 +347,8 @@ class LauncherWindow(Adw.ApplicationWindow):
             *self.log_view.get_buffer().get_bounds(), False) if hasattr(self, "log_view") else ""
         self.stack.add_titled_with_icon(self.build_settings_page(), "settings", tr("Настройки"),
                                         "preferences-system-symbolic")
+        self.stack.add_titled_with_icon(self.build_controls_page(), "controls", tr("Управление"),
+                                        "input-keyboard-symbolic")
         self.stack.add_titled_with_icon(self.build_online_page(), "online", tr("Онлайн"),
                                         "network-workgroup-symbolic")
         self.stack.add_titled_with_icon(self.build_log_page(), "log", tr("Журнал"),
@@ -439,9 +453,10 @@ class LauncherWindow(Adw.ApplicationWindow):
                                   tr("Без перезапуска, но медленнее на Steam Deck и старых GPU"),
                                   LIVE_RESOLUTION, self.ini.get("live_resolution", "0"))
         screen.add(self.live_row)
-        self.fullscreen_row = Adw.SwitchRow(title=tr("Полноэкранный режим"),
-                                            active=self.settings["fullscreen"])
-        screen.add(self.fullscreen_row)
+        self.window_mode_row = combo_row(tr("Режим окна"), tr(
+            "Выберите оконный режим; изменение применяется при следующем запуске игры"),
+            WINDOW_MODES, self.settings.get("window_mode", "windowed"))
+        screen.add(self.window_mode_row)
         self.present_row = combo_row(tr("Режим показа кадров"), None, PRESENT_MODES,
                                      self.settings["present_mode"])
         screen.add(self.present_row)
@@ -661,9 +676,11 @@ class LauncherWindow(Adw.ApplicationWindow):
         self.choose_folder(tr("Папка игры (с eboot.bin)"), self.game_dir(), chosen)
 
     def store(self):
+        self.store_controls()
         s = self.settings
         s["language"] = combo_value(self.language_row)
-        s["fullscreen"] = self.fullscreen_row.get_active()
+        s["window_mode"] = combo_value(self.window_mode_row)
+        s["fullscreen"] = s["window_mode"] != "windowed"  # legacy compatibility
         s["present_mode"] = combo_value(self.present_row)
         s["hdr"] = self.hdr_row.get_active()
         s["fps_mode"] = combo_value(self.fps_row)
