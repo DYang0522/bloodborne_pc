@@ -1,4 +1,6 @@
-# Ubuntu 24.04 AppDir packaging, following the proven GoW3 workflow.
+# Linux AppImage workflow, following the build stages used by the gow3 project.
+# Keep Bloodborne's own Nix environment, build script and AppImage bundler:
+# the two projects have different dependencies and packaging implementations.
 name: Linux AppImage
 
 on:
@@ -22,42 +24,28 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install GTK and Python runtime inputs
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            binutils curl file gcc patchelf python3.12 python3-gi python3-pil \
-            gir1.2-gtk-4.0 gir1.2-adw-1 libgtk-4-1 libadwaita-1-0 \
-            adwaita-icon-theme hicolor-icon-theme librsvg2-common fonts-dejavu-core
-
       - name: Dependencies
         uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      # Pin the complete Nix dependency closure to the Ubuntu 24.04 ABI baseline.
-      # Rolling nixpkgs-unstable now uses glibc 2.44, which cannot run on Ubuntu 24.04.
-      - name: Pin nixpkgs to glibc 2.39
+      - name: Update nixpkgs channel
         run: |
-          revision=b134951a4c9f3c995fd7be05f3243f8ecd65d798
-          export NIX_PATH="nixpkgs=https://github.com/NixOS/nixpkgs/archive/${revision}.tar.gz"
-          echo "NIX_PATH=$NIX_PATH" >> "$GITHUB_ENV"
-          glibc_version="$(nix-instantiate --eval --raw -E '(import <nixpkgs> {}).glibc.version')"
-          echo "Pinned nixpkgs revision: $revision"
-          echo "Pinned nixpkgs glibc: $glibc_version"
-          test "$glibc_version" = "2.39"
+          nix-channel --add https://nixos.org/channels/nixpkgs-unstable nixpkgs
+          nix-channel --update
 
       - name: Hardware-check tests
         run: PYTHONPATH=tests:scripts python3 tests/test_launcher_hardware.py
 
       - name: Build and native tests
         run: |
+          # The runtime tests create this directory and currently do not create its parent.
           mkdir -p "$HOME/.local/share/shadPS4"
           bash build.sh --test
 
       - name: AppImage
-        run: bash packaging/appimage.sh
+        run: nix-shell shell.nix --run "bash packaging/appimage.sh"
 
       - uses: actions/upload-artifact@v4
         with:

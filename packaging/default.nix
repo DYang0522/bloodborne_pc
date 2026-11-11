@@ -1,5 +1,5 @@
 # Packaged port: the prebuilt game binaries (build.sh first), the start-up scripts and the GTK4
-# launcher, with the required Nix runtime closure; Vulkan loader and drivers come from the host. `bash packaging/appimage.sh`
+# launcher, with their whole Nix closure and Mesa's Vulkan drivers. `bash packaging/appimage.sh`
 # turns it into an AppImage (Steam Deck); `nix-build packaging` alone gives result/bin/bbport.
 { pkgs ? import <nixpkgs> { }
   # Store paths the prebuilt binaries load libraries from (their RUNPATHs), written by
@@ -19,7 +19,7 @@ let
     ++ lib.optional fsr411 "fsr4_411";
   # Only what the package needs (the tree also holds builds, profiles and captures).
   wanted = [
-    "run.sh" "run.py" "tools/legacy-cpu-plan.json" "out" "out/bb-probe" "out/bb-gpu-capabilities" "out/gpu" "out/gpu/libbbgpu.so"
+    "run.sh" "run.py" "out" "out/bb-probe" "out/bb-gpu-capabilities" "out/gpu" "out/gpu/libbbgpu.so"
   ] ++ assetDirs;
   src = builtins.path {
     name = "bbport-src";
@@ -32,8 +32,10 @@ let
   python = pkgs.python3.withPackages (ps: [ ps.pygobject3 ]);
   # run.sh's scripts: Pillow turns the game's trophy pictures into the pop-up's (run.py write_trophy_icons).
   startPython = pkgs.python3.withPackages (ps: [ ps.pillow ]);
-  # Vulkan loader and GPU drivers are host-provided, like the GoW3 AppImage.
-  # This avoids bundling Mesa/LLVM and keeps the ICD matched to the host kernel driver.
+  # Mesa comes with the package. bbport_vulkan.py adds the host NVIDIA ICD and
+  # only its vendor libraries (matching the host's kernel module).
+  icds = lib.concatMapStringsSep ":" (name: "${pkgs.mesa}/share/vulkan/icd.d/${name}")
+    [ "radeon_icd.x86_64.json" "intel_icd.x86_64.json" ];
   # Fonts: bundled DejaVu and Adwaita plus the host's usual font directories, but not the host's
   # /etc/fonts: on NixOS it names fonts in the host's /nix/store, which the AppImage hides behind
   # its own store in some environments (Steam's FHS sandbox), and the launcher showed boxes.
@@ -60,7 +62,7 @@ let
       --set-default LC_ALL C.UTF-8 \
       --set-default SSL_CERT_FILE ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt \
       --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ pkgs.libglvnd pkgs.libx11 pkgs.libxext ]} \
-      --set-default BB_VULKANINFO vulkaninfo \
+      --set BB_VULKANINFO ${pkgs.vulkan-tools}/bin/vulkaninfo \
   '';
 in
 pkgs.stdenv.mkDerivation {
@@ -84,7 +86,7 @@ pkgs.stdenv.mkDerivation {
     d=$out/share/bbport
     mkdir -p $d/bin $out/bin
     cp run.sh run.py $d/ # scripts/linux_start.py uses run.py's start steps
-    cp -r scripts patches launcher $d/\n    mkdir -p $d/tools\n    install -m644 tools/legacy-cpu-plan.json $d/tools/legacy-cpu-plan.json
+    cp -r scripts patches launcher $d/
     # FSR 4 shader assets are optional and may be absent in CI or clean public checkouts.
     if [ -d fsr4_shaders ]; then
       cp -r fsr4_shaders $d/
@@ -121,6 +123,7 @@ pkgs.stdenv.mkDerivation {
       ${common}      --add-flags "$out/share/bbport/launcher/bbport_vulkan.py ${python}/bin/python3 $out/share/bbport/launcher/bbport_launcher.py" \
       --set BB_PREBUILT 1 \
       --set PYTHON ${startPython}/bin/python3 \
+      --set BB_BUNDLED_VK_DRIVER_FILES ${icds} \
       --prefix PATH : ${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.util-linux ]} \
       --run 'export BB_DATA_DIR=''${BB_DATA_DIR:-''${XDG_DATA_HOME:-$HOME/.local/share}/bbport}; mkdir -p "$BB_DATA_DIR"'
     # The game alone, without the launcher (settings from the data directory's bbport.ini).
@@ -128,6 +131,7 @@ pkgs.stdenv.mkDerivation {
       ${common}      --add-flags "$out/share/bbport/launcher/bbport_vulkan.py ${pkgs.bash}/bin/bash $out/share/bbport/run.sh" \
       --set BB_PREBUILT 1 \
       --set PYTHON ${startPython}/bin/python3 \
+      --set BB_BUNDLED_VK_DRIVER_FILES ${icds} \
       --prefix PATH : ${lib.makeBinPath [ pkgs.bash pkgs.coreutils ]} \
       --run 'export BB_DATA_DIR=''${BB_DATA_DIR:-''${XDG_DATA_HOME:-$HOME/.local/share}/bbport}; mkdir -p "$BB_DATA_DIR"'
   '';

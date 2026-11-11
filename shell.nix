@@ -1,25 +1,13 @@
-# Linux build environment. The Nix package set is pinned in the AppImage workflow
-# to the Ubuntu 24.04-compatible glibc 2.39 baseline.
+# Build environment: `nix-shell native_probe/shell.nix --run 'bash native_probe/run.sh'`
 { pkgs ? import <nixpkgs> {} }:
-let
-  sdl3 = pkgs.callPackage ./packaging/nix/sdl3.nix {};
-  vulkanHeaders = pkgs.callPackage ./packaging/nix/vulkan-headers.nix {};
-  vma = pkgs.callPackage ./packaging/nix/vulkan-memory-allocator.nix {};
-in
 pkgs.mkShell {
   packages = with pkgs; [
-    gcc14 gnumake cmake ninja pkg-config binutils patchelf
+    gcc gnumake cmake ninja pkg-config binutils
     (python3.withPackages (ps: [ ps.pillow ])) # Pillow: the trophy pop-up's pictures (run.py)
-    vulkanHeaders vulkan-loader sdl3
+    vulkan-headers vulkan-loader sdl3
     # GPU library (gpu/): shadPS4 video core dependencies
-    ffmpeg-headless boost fmt robin-map xxHash vma glslang spirv-cross zydis zydis.zycore spirv-headers xorg.libX11 xorg.libxcb xorg.libXau xorg.libXdmcp xorg.xorgproto wayland
+    ffmpeg-headless boost fmt magic-enum robin-map xxhash vulkan-memory-allocator glslang spirv-cross xbyak zydis spirv-headers miniz libx11 libxcb xorgproto wayland
     # Online (gpu/bbnet): shadNet's protobuf, HTTPS and gzip for cpp-httplib, JSON, UPnP
     protobuf openssl zlib nlohmann_json miniupnpc
   ];
-
-  # Keep C and C++ on the GCC 14 toolchain supplied by this pinned package set.
-  shellHook = ''
-    export CC=${pkgs.gcc14}/bin/gcc
-    export CXX=${pkgs.gcc14}/bin/g++
-  '';
 }
