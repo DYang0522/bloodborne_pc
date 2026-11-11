@@ -8,34 +8,16 @@ set -euo pipefail
 cd -- "$(dirname -- "$0")/.."
 [[ -f out/bb-probe && -f out/gpu/libbbgpu.so ]] || { echo 'Build first: bash build.sh' >&2; exit 1; }
 root=$PWD
-# The full RUNPATH contains build-shell search directories too. Bundle only the
-# Nix store roots of libraries that ldd resolves for the installed ELF files;
-# their Nix closures bring along the transitive runtime dependencies.
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
-: > "$work/runtime-roots.txt"
-for elf in out/bb-probe out/gpu/libbbgpu.so; do
-    if ! ldd "$elf" > "$work/ldd.txt"; then
-        echo "Could not resolve runtime dependencies for $elf" >&2
-        exit 1
-    fi
-    if grep -q 'not found' "$work/ldd.txt"; then
-        echo "Unresolved runtime dependency in $elf:" >&2
-        cat "$work/ldd.txt" >&2
-        exit 1
-    fi
-    grep -oE '/nix/store/[^ /]+' "$work/ldd.txt" >> "$work/runtime-roots.txt" || true
-done
-sort -u "$work/runtime-roots.txt" > "$work/runtime-roots.sorted"
+# Preserve the complete RUNPATH closure, including libraries loaded later via dlopen.
 {
     echo '['
-    while IFS= read -r path; do
-        [[ -n "$path" ]] && printf '  "%s"\n' "$path"
-    done < "$work/runtime-roots.sorted"
+    for elf in out/bb-probe out/gpu/libbbgpu.so; do
+        readelf -d "$elf" | sed -n 's/.*\[\(.*\)\]/\1/p' | tr ':' '\n'
+    done | grep -o '^/nix/store/[^/]*' | sort -u | grep -v -- '-nix-shell$' | sed 's/.*/  "&"/'
     echo ']'
 } > packaging/runtime-paths.nix
-printf 'Bundling %s Nix runtime roots (resolved by ldd):\n' "$(wc -l < "$work/runtime-roots.sorted")"
-cat "$work/runtime-roots.sorted"
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
 (cd "$work" && nix bundle --impure --bundler github:ralismark/nix-appimage \
     --expr "import $root/packaging {}")
 mkdir -p dist
