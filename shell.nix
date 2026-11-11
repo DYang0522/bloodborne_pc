@@ -56,8 +56,10 @@ let
     buildFfmpeg = false;
     buildFfplay = false;
     buildFfprobe = false;
-    buildAvdevice = false;
-    buildAvfilter = false;
+    # FFmpeg 9's default build also links tools/uncoded_frame against both libraries.
+    # Keep the internal libs, while all optional external backends remain disabled above.
+    buildAvdevice = true;
+    buildAvfilter = true;
     buildAvformat = true;
     buildAvcodec = true;
     buildAvutil = true;
