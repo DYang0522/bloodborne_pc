@@ -53,7 +53,7 @@ stdenv.mkDerivation {
   src = fetchFromGitHub {
     owner = "libsdl-org";
     repo = "SDL";
-    tag = "preview-${version}";
+    tag = "preview-3.1.8";
     hash = "sha256-yfnW5y99EegifRavvZWmXPH2NFPKWoe90RmGDGk6PI4=";
   };
 
