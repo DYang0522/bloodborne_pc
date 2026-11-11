@@ -8,6 +8,8 @@ let
     withHeadlessDeps = false;
     withSmallDeps = false;
     withFullDeps = false;
+    # FFmpeg's own pixelutils test target expects this internal libavutil component.
+    withPixelutils = true;
     withNetwork = false;
     withAlsa = false;
     withAmf = false;
