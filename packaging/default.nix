@@ -32,10 +32,8 @@ let
   python = pkgs.python3.withPackages (ps: [ ps.pygobject3 ]);
   # run.sh's scripts: Pillow turns the game's trophy pictures into the pop-up's (run.py write_trophy_icons).
   startPython = pkgs.python3.withPackages (ps: [ ps.pillow ]);
-  # Mesa comes with the package. bbport_vulkan.py adds the host NVIDIA ICD and
-  # only its vendor libraries (matching the host's kernel module).
-  icds = lib.concatMapStringsSep ":" (name: "${pkgs.mesa}/share/vulkan/icd.d/${name}")
-    [ "radeon_icd.x86_64.json" "intel_icd.x86_64.json" ];
+  # GPU drivers and the Vulkan loader come from the host. The launcher selects
+  # host AMD/Intel ICDs or the matching host NVIDIA driver; never bundle Mesa here.
   # Fonts: bundled DejaVu and Adwaita plus the host's usual font directories, but not the host's
   # /etc/fonts: on NixOS it names fonts in the host's /nix/store, which the AppImage hides behind
   # its own store in some environments (Steam's FHS sandbox), and the launcher showed boxes.
@@ -123,7 +121,6 @@ pkgs.stdenv.mkDerivation {
       ${common}      --add-flags "$out/share/bbport/launcher/bbport_vulkan.py ${python}/bin/python3 $out/share/bbport/launcher/bbport_launcher.py" \
       --set BB_PREBUILT 1 \
       --set PYTHON ${startPython}/bin/python3 \
-      --set BB_BUNDLED_VK_DRIVER_FILES ${icds} \
       --prefix PATH : ${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.util-linux ]} \
       --run 'export BB_DATA_DIR=''${BB_DATA_DIR:-''${XDG_DATA_HOME:-$HOME/.local/share}/bbport}; mkdir -p "$BB_DATA_DIR"'
     # The game alone, without the launcher (settings from the data directory's bbport.ini).
@@ -131,7 +128,6 @@ pkgs.stdenv.mkDerivation {
       ${common}      --add-flags "$out/share/bbport/launcher/bbport_vulkan.py ${pkgs.bash}/bin/bash $out/share/bbport/run.sh" \
       --set BB_PREBUILT 1 \
       --set PYTHON ${startPython}/bin/python3 \
-      --set BB_BUNDLED_VK_DRIVER_FILES ${icds} \
       --prefix PATH : ${lib.makeBinPath [ pkgs.bash pkgs.coreutils ]} \
       --run 'export BB_DATA_DIR=''${BB_DATA_DIR:-''${XDG_DATA_HOME:-$HOME/.local/share}/bbport}; mkdir -p "$BB_DATA_DIR"'
   '';
