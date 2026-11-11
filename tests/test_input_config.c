@@ -342,7 +342,7 @@ static void TestDefaultTextParsesCleanly(void) {
     assert(cfg.warnings == 0);
     assert(HasKeyBinding(&cfg, OUT_CROSS, SDL_SCANCODE_SPACE));
     assert(HasCButtonBinding(&cfg, OUT_CROSS, SDL_GAMEPAD_BUTTON_SOUTH));
-    assert(cfg.mouse.stick == 0); /* mouse_to_joystick left commented out */
+    assert(cfg.mouse.stick == 2); /* mouse look is enabled on the right stick by default */
     assert(cfg.toggle_scancode == SDL_SCANCODE_F7);
     assert(cfg.reload_scancode == SDL_SCANCODE_F8);
 }
