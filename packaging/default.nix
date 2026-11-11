@@ -1,5 +1,5 @@
 # Packaged port: the prebuilt game binaries (build.sh first), the start-up scripts and the GTK4
-# launcher, with their whole Nix closure and Mesa's Vulkan drivers. `bash packaging/appimage.sh`
+# launcher, with their runtime closure. Vulkan uses the host's graphics driver. `bash packaging/appimage.sh`
 # turns it into an AppImage (Steam Deck); `nix-build packaging` alone gives result/bin/bbport.
 { pkgs ? import <nixpkgs> { }
   # Store paths the prebuilt binaries load libraries from (their RUNPATHs), written by
@@ -60,7 +60,6 @@ let
       --set-default LC_ALL C.UTF-8 \
       --set-default SSL_CERT_FILE ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt \
       --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ pkgs.libglvnd pkgs.libx11 pkgs.libxext ]} \
-      --set BB_VULKANINFO ${pkgs.vulkan-tools}/bin/vulkaninfo \
   '';
 in
 pkgs.stdenv.mkDerivation {
