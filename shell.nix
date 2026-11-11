@@ -12,7 +12,7 @@ pkgs.mkShell {
     (python3.withPackages (ps: [ ps.pillow ])) # Pillow: the trophy pop-up's pictures (run.py)
     vulkanHeaders vulkan-loader sdl3
     # GPU library (gpu/): shadPS4 video core dependencies
-    ffmpeg-headless boost fmt robin-map xxHash vma glslang spirv-cross zydis zydis.zycore spirv-headers miniz xorg.libX11 xorg.libxcb xorg.libXau xorg.libXdmcp xorg.xorgproto wayland
+    ffmpeg-headless boost fmt robin-map xxHash vma glslang spirv-cross zydis zydis.zycore spirv-headers xorg.libX11 xorg.libxcb xorg.libXau xorg.libXdmcp xorg.xorgproto wayland
     # Online (gpu/bbnet): shadNet's protobuf, HTTPS and gzip for cpp-httplib, JSON, UPnP
     protobuf openssl zlib nlohmann_json miniupnpc
   ];
