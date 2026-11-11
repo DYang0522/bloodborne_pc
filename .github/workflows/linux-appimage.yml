@@ -47,6 +47,26 @@ jobs:
       - name: AppImage
         run: nix-shell shell.nix --run "bash packaging/appimage.sh"
 
+      - name: Smoke-test the packaged launcher
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb fonts-dejavu-core
+          # nix-appimage relies on unprivileged user namespaces to mount its Nix store.
+          unshare -Ur true
+          chmod +x dist/Bloodborne-bbport-x86_64.AppImage
+          set +e
+          xvfb-run -a timeout --signal=TERM --kill-after=5s 20s \
+            ./dist/Bloodborne-bbport-x86_64.AppImage \
+            > "$RUNNER_TEMP/bbport-appimage-smoke.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/bbport-appimage-smoke.log"
+          if [ "$status" -ne 124 ]; then
+            echo "AppImage launcher exited instead of staying open (status $status)." >&2
+            exit 1
+          fi
+          echo "AppImage launcher stayed open for 20 seconds."
+
       - uses: actions/upload-artifact@v4
         with:
           name: Bloodborne-bbport-x86_64.AppImage
