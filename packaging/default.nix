@@ -26,8 +26,10 @@ let
     path = root;
     filter = path: type:
       let rel = lib.removePrefix (toString root + "/") (toString path);
-      in builtins.elem rel wanted
-        || lib.any (dir: lib.hasPrefix (dir + "/") rel) assetDirs;
+      in (builtins.elem rel wanted
+          || lib.any (dir: lib.hasPrefix (dir + "/") rel) assetDirs)
+        # Test save fixtures are only used by the repository's test suite, never the launcher.
+        && !(rel == "launcher/assets/tests" || lib.hasPrefix "launcher/assets/tests/" rel);
   };
   python = pkgs.python3.withPackages (ps: [ ps.pygobject3 ]);
   # run.sh's scripts: Pillow turns the game's trophy pictures into the pop-up's (run.py write_trophy_icons).
@@ -73,7 +75,7 @@ pkgs.stdenv.mkDerivation {
   dontConfigure = true;
   # The binaries live under share/ (next to the scripts run.sh expects): strip them too, which
   # also drops the compiler and header paths their debug info would keep in the closure.
-  stripDebugList = [ "share/bbport/bin/gpu" ];
+  stripDebugList = [ "share/bbport/bin/bb-probe" "share/bbport/bin/gpu" ];
   # patchelf (RPATH shrinking) corrupts the non-PIE game binary's symbol versions; it finds
   # its library through $ORIGIN/gpu and its other libraries through the build's RUNPATH.
   dontPatchELF = true;
