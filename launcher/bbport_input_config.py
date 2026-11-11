@@ -378,8 +378,8 @@ axis_right_y_plus = down
 # Hold to halve the left stick (walk): uncomment and pick a key
 # leftjoystick_halfmode = lalt
 
-# Mouse (uncomment mouse_to_joystick to turn it on; buttons work only while captured)
-# mouse_to_joystick = right
+# Mouse (enabled by default; buttons work only while captured)
+mouse_to_joystick = right
 mouse_movement_params = 0.5, 1, 0.125
 r1 = leftbutton
 r2 = rightbutton
@@ -493,7 +493,7 @@ def keyboard_layout(lines):
 
 
 # shadPS4/bbport defaults when mouse_movement_params is absent (spec section 4.2 / 4.3).
-MOUSE_SETTINGS_DEFAULTS = {'enabled': False, 'stick': 'right',
+MOUSE_SETTINGS_DEFAULTS = {'enabled': True, 'stick': 'right',
                             'deadzone_offset': 0.5, 'speed': 1.0, 'speed_offset': 0.125,
                             'invert_x': False, 'invert_y': False, 'sensitivity_y': 1.0,
                             'camera': 'stick', 'camera_sensitivity': 1.0}
