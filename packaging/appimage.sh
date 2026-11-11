@@ -127,6 +127,31 @@ done < <(find "$appdir/usr/bin" "$appdir/usr/lib/python$pyver/lib-dynload" "$app
 find "$libdir" -type f -name '*.so*' -exec strip --strip-unneeded {} + 2>/dev/null || true
 find "$appdir/usr/lib/python$pyver" "$appdir/usr/lib/python3/dist-packages" -type f -name '*.so' -exec strip --strip-unneeded {} + 2>/dev/null || true
 
+# Nix-built ELF files carry absolute RPATH entries into the build machine's store. In
+# particular, a Nix glibc libdl loaded beside the host Ubuntu libc causes GLIBC_ABI
+# version conflicts. All non-host dependencies have already been copied to usr/lib,
+# which AppRun adds to LD_LIBRARY_PATH, so discard Nix store RPATH entries.
+command -v patchelf >/dev/null || {
+    echo "Missing patchelf; it is required to remove build-host Nix RPATH entries." >&2
+    exit 1
+}
+while IFS= read -r -d '' elf; do
+    file -b "$elf" | grep -q '^ELF' || continue
+    rpath=$(patchelf --print-rpath "$elf" 2>/dev/null || true)
+    [[ $rpath == *"/nix/store/"* ]] || continue
+    IFS=: read -r -a entries <<< "$rpath"
+    kept=()
+    for entry in "${entries[@]}"; do
+        [[ $entry == *"/nix/store/"* ]] || kept+=("$entry")
+    done
+    if (("${#kept[@]}" > 0)); then
+        new_rpath=$(IFS=:; printf '%s' "${kept[*]}")
+        patchelf --set-rpath "$new_rpath" "$elf"
+    else
+        patchelf --remove-rpath "$elf"
+    fi
+done < <(find "$appdir" -type f -print0)
+
 # Fail the package step if PyGObject cannot load both GTK4 and libadwaita.
 export LD_LIBRARY_PATH="$libdir"
 export PYTHONHOME="$appdir/usr"

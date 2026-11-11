@@ -2,7 +2,7 @@
 { pkgs ? import <nixpkgs> {} }:
 pkgs.mkShell {
   packages = with pkgs; [
-    gcc gnumake cmake ninja pkg-config binutils
+    gcc gnumake cmake ninja pkg-config binutils patchelf
     (python3.withPackages (ps: [ ps.pillow ])) # Pillow: the trophy pop-up's pictures (run.py)
     vulkan-headers vulkan-loader sdl3
     # GPU library (gpu/): shadPS4 video core dependencies
