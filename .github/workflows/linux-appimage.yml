@@ -51,15 +51,35 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends xvfb fonts-dejavu-core
-          # nix-appimage relies on unprivileged user namespaces to mount its Nix store.
-          unshare -Ur true
           chmod +x dist/Bloodborne-bbport-x86_64.AppImage
+
           set +e
-          xvfb-run -a timeout --signal=TERM --kill-after=5s 20s \
-            ./dist/Bloodborne-bbport-x86_64.AppImage \
-            > "$RUNNER_TEMP/bbport-appimage-smoke.log" 2>&1
-          status=$?
+          unshare -Ur true 2>"$RUNNER_TEMP/userns-check.log"
+          userns_status=$?
           set -e
+
+          if [ "$userns_status" -eq 0 ]; then
+            echo "Unprivileged user namespaces are available; testing the normal AppImage path."
+            set +e
+            xvfb-run -a timeout --signal=TERM --kill-after=5s 20s \
+              ./dist/Bloodborne-bbport-x86_64.AppImage \
+              > "$RUNNER_TEMP/bbport-appimage-smoke.log" 2>&1
+            status=$?
+            set -e
+          else
+            echo "The hosted runner blocks unprivileged user namespaces:"
+            cat "$RUNNER_TEMP/userns-check.log"
+            echo "Testing the packaged AppRun as root using extract-and-run (no UID map needed)."
+            sudo mkdir -p "$RUNNER_TEMP/bbport-smoke-home"
+            set +e
+            sudo env HOME="$RUNNER_TEMP/bbport-smoke-home" \
+              xvfb-run -a timeout --signal=TERM --kill-after=5s 20s \
+              ./dist/Bloodborne-bbport-x86_64.AppImage --appimage-extract-and-run \
+              > "$RUNNER_TEMP/bbport-appimage-smoke.log" 2>&1
+            status=$?
+            set -e
+          fi
+
           cat "$RUNNER_TEMP/bbport-appimage-smoke.log"
           if [ "$status" -ne 124 ]; then
             echo "AppImage launcher exited instead of staying open (status $status)." >&2
