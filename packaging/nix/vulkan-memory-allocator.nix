@@ -7,7 +7,7 @@ stdenvNoCC.mkDerivation {
   src = fetchFromGitHub {
     owner = "GPUOpen-LibrariesAndSDKs";
     repo = "VulkanMemoryAllocator";
-    tag = "v3.5.0";
+    rev = "v3.5.0";
     hash = "sha256-MQg4Bzqj6lLz6W7sRmjC3gxtddWlwEPsED+2Dwk8KII=";
   };
 
