@@ -71,13 +71,18 @@ bundle() {
             echo "Unresolved dependency of $elf: $line" >&2
             return 1
         fi
-        if [[ $line =~ '=>'[[:space:]]+([^[:space:]]+) ]]; then
-            lib=${BASH_REMATCH[1]}
-        elif [[ $line =~ ^(/[^[:space:]]+) ]]; then
-            lib=${BASH_REMATCH[1]}
-        else
-            continue
-        fi
+        case "$line" in
+            *" => "*)
+                lib=${line#* => }
+                lib=${lib%% *}
+                ;;
+            /*)
+                lib=${line%% *}
+                ;;
+            *)
+                continue
+                ;;
+        esac
         [[ -n $lib && -f $lib ]] || continue
         name=$(basename "$lib")
         [[ $name =~ $excluded ]] && continue
