@@ -20,6 +20,7 @@ let
   # Only what the package needs (the tree also holds builds, profiles and captures).
   wanted = [
     "run.sh" "run.py" "out" "out/bb-probe" "out/bb-gpu-capabilities" "out/gpu" "out/gpu/libbbgpu.so"
+    "tools/legacy-cpu-plan.json"
   ] ++ assetDirs;
   src = builtins.path {
     name = "bbport-src";
@@ -87,6 +88,8 @@ pkgs.stdenv.mkDerivation {
     mkdir -p $d/bin $out/bin
     cp run.sh run.py $d/ # scripts/linux_start.py uses run.py's start steps
     cp -r scripts patches launcher $d/
+    mkdir -p $d/tools
+    install -m644 tools/legacy-cpu-plan.json $d/tools/legacy-cpu-plan.json
     # FSR 4 shader assets are optional and may be absent in CI or clean public checkouts.
     if [ -d fsr4_shaders ]; then
       cp -r fsr4_shaders $d/
