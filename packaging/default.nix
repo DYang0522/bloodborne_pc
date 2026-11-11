@@ -26,10 +26,8 @@ let
     path = root;
     filter = path: type:
       let rel = lib.removePrefix (toString root + "/") (toString path);
-      in (builtins.elem rel wanted
-          || lib.any (dir: lib.hasPrefix (dir + "/") rel) assetDirs)
-        # Test save fixtures are only used by the repository's test suite, never the launcher.
-        && !(rel == "launcher/assets/tests" || lib.hasPrefix "launcher/assets/tests/" rel);
+      in builtins.elem rel wanted
+        || lib.any (dir: lib.hasPrefix (dir + "/") rel) assetDirs;
   };
   python = pkgs.python3.withPackages (ps: [ ps.pygobject3 ]);
   # run.sh's scripts: Pillow turns the game's trophy pictures into the pop-up's (run.py write_trophy_icons).
@@ -55,7 +53,8 @@ let
     </fontconfig>
   '';
   # Environment the closure needs on any host: icon themes, SVG icon loader, fonts (above) and
-  # a UTF-8 locale built into glibc, and certificate authorities for the launcher's HTTPS.
+  # a UTF-8 locale built into glibc, and certificate authorities for the launcher's HTTPS (the
+  # Online page's sign-in and parties: Nix's Python does not look in the host's).
   common = ''
       --prefix XDG_DATA_DIRS : ${pkgs.mangohud}/share:${pkgs.adwaita-icon-theme}/share:${pkgs.hicolor-icon-theme}/share:${pkgs.gtk4}/share/gsettings-schemas/${pkgs.gtk4.name} \
       --set-default GDK_PIXBUF_MODULE_FILE ${pkgs.librsvg}/${pkgs.gdk-pixbuf.moduleDir}.cache \
@@ -77,7 +76,7 @@ pkgs.stdenv.mkDerivation {
   dontConfigure = true;
   # The binaries live under share/ (next to the scripts run.sh expects): strip them too, which
   # also drops the compiler and header paths their debug info would keep in the closure.
-  stripDebugList = [ "share/bbport/bin/bb-probe" "share/bbport/bin/gpu" ];
+  stripDebugList = [ "share/bbport/bin/gpu" ];
   # patchelf (RPATH shrinking) corrupts the non-PIE game binary's symbol versions; it finds
   # its library through $ORIGIN/gpu and its other libraries through the build's RUNPATH.
   dontPatchELF = true;
@@ -86,11 +85,14 @@ pkgs.stdenv.mkDerivation {
     runHook preInstall
     d=$out/share/bbport
     mkdir -p $d/bin $out/bin
-    cp run.sh run.py $d/
+    cp run.sh run.py $d/ # scripts/linux_start.py uses run.py's start steps
     cp -r scripts patches launcher $d/
+    # FSR 4 shader assets are optional and may be absent in CI or clean public checkouts.
     if [ -d fsr4_shaders ]; then
       cp -r fsr4_shaders $d/
     fi
+    # FSR 4.1.1 models only with BB_PACKAGE_FSR411=1 (see above); otherwise run.sh finds them in
+    # the data directory (~/.local/share/bbport/fsr4_411).
     if [ -d fsr4_411 ]; then
       ${pkgs.python3}/bin/python3 - <<'PY'
     import sys
@@ -111,10 +113,10 @@ pkgs.stdenv.mkDerivation {
     runHook postInstall
   '';
   postFixup = ''
-    # bin/bbport is a static program (bbport-entry.c) that clears the host's LD_PRELOAD
-    # and similar variables, then invokes the real wrapper in libexec.
+    # bin/bbport is a static program (bbport-entry.c) that clears the host's LD_PRELOAD (Steam's
+    # overlay) and similar before the wrapper's own dynamic programs start.
     mkdir -p $out/libexec
-    gcc -O2 -Wall -Werror -static -L${pkgs.glibc.static}/lib -DTARGET="\\\"$out/libexec/bbport\\\"" \
+    gcc -O2 -Wall -Werror -static -L${pkgs.glibc.static}/lib -DTARGET="\"$out/libexec/bbport\"" \
       ${./bbport-entry.c} -o $out/bin/bbport
     makeShellWrapper ${python}/bin/python3 $out/libexec/bbport \
       "''${gappsWrapperArgs[@]}" \
@@ -123,14 +125,15 @@ pkgs.stdenv.mkDerivation {
       --set PYTHON ${startPython}/bin/python3 \
       --set BB_BUNDLED_VK_DRIVER_FILES ${icds} \
       --prefix PATH : ${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.util-linux ]} \
-      --run 'export BB_DATA_DIR=''\${BB_DATA_DIR:-''\${XDG_DATA_HOME:-$HOME/.local/share}/bbport}; mkdir -p "$BB_DATA_DIR"'
+      --run 'export BB_DATA_DIR=''${BB_DATA_DIR:-''${XDG_DATA_HOME:-$HOME/.local/share}/bbport}; mkdir -p "$BB_DATA_DIR"'
+    # The game alone, without the launcher (settings from the data directory's bbport.ini).
     makeShellWrapper ${pkgs.python3}/bin/python3 $out/bin/bbport-game \
       ${common}      --add-flags "$out/share/bbport/launcher/bbport_vulkan.py ${pkgs.bash}/bin/bash $out/share/bbport/run.sh" \
       --set BB_PREBUILT 1 \
       --set PYTHON ${startPython}/bin/python3 \
       --set BB_BUNDLED_VK_DRIVER_FILES ${icds} \
       --prefix PATH : ${lib.makeBinPath [ pkgs.bash pkgs.coreutils ]} \
-      --run 'export BB_DATA_DIR=''\${BB_DATA_DIR:-''\${XDG_DATA_HOME:-$HOME/.local/share}/bbport}; mkdir -p "$BB_DATA_DIR"'
+      --run 'export BB_DATA_DIR=''${BB_DATA_DIR:-''${XDG_DATA_HOME:-$HOME/.local/share}/bbport}; mkdir -p "$BB_DATA_DIR"'
   '';
   meta.mainProgram = "bbport";
 }
