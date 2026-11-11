@@ -53,6 +53,11 @@ class InputDefaultsTests(unittest.TestCase):
     def test_launcher_default_matches_the_game(self):
         self.assertEqual(config.DEFAULT_INPUT_INI, game_default_text())
 
+    def test_mouse_look_is_enabled_in_the_launcher_default(self):
+        _bindings, _lines, _toggle, _reload, mouse = config.read_input_lines(
+            config.DEFAULT_INPUT_INI.splitlines())
+        self.assertTrue(mouse["enabled"])
+
     def test_saving_before_the_game_made_the_file_keeps_the_controller(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / 'input.ini'
