@@ -36,10 +36,17 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
-      - name: Update nixpkgs channel
+      # Pin the complete Nix dependency closure to the Ubuntu 24.04 ABI baseline.
+      # Rolling nixpkgs-unstable now uses glibc 2.44, which cannot run on Ubuntu 24.04.
+      - name: Pin nixpkgs to glibc 2.39
         run: |
-          nix-channel --add https://nixos.org/channels/nixpkgs-unstable nixpkgs
-          nix-channel --update
+          revision=b134951a4c9f3c995fd7be05f3243f8ecd65d798
+          export NIX_PATH="nixpkgs=https://github.com/NixOS/nixpkgs/archive/${revision}.tar.gz"
+          echo "NIX_PATH=$NIX_PATH" >> "$GITHUB_ENV"
+          glibc_version="$(nix-instantiate --eval --raw -E '(import <nixpkgs> {}).glibc.version')"
+          echo "Pinned nixpkgs revision: $revision"
+          echo "Pinned nixpkgs glibc: $glibc_version"
+          test "$glibc_version" = "2.39"
 
       - name: Hardware-check tests
         run: PYTHONPATH=tests:scripts python3 tests/test_launcher_hardware.py
