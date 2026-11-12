@@ -9,6 +9,96 @@ from bbport_lang import table as _translation_table
 
 ZH = _translation_table("zh")
 
+
+# Chinese labels used by the Linux-only Controls page. The Windows translation table
+# does not contain these newer GTK controls strings.
+CONTROLS_ZH = {
+    "Keyboard, mouse and gamepad": "键盘、鼠标和手柄",
+    "Input devices work together. Settings are saved when you start the game.": "键盘、鼠标和手柄可以同时使用。设置会在启动游戏时保存。",
+    "Hotkeys": "快捷键",
+    "toggle mouse capture": "切换鼠标捕获",
+    "reload input.ini": "重新加载 input.ini",
+    "Mouse controls": "鼠标控制",
+    "The game captures the cursor when mouse mode is enabled, the window is focused and the menu is closed.": "启用鼠标模式、游戏窗口处于焦点且菜单关闭时，游戏会捕获鼠标光标。",
+    "Enable mouse camera": "启用鼠标控制视角",
+    "After launch, F7 temporarily toggles mouse capture": "启动游戏后，可按 F7 临时切换鼠标捕获",
+    "Which stick the mouse controls": "鼠标控制哪个摇杆",
+    "Right stick (camera)": "右摇杆（视角）",
+    "Left stick": "左摇杆",
+    "Camera mode": "视角模式",
+    "Emulated stick": "模拟摇杆",
+    "Direct camera (1:1)": "直接控制视角（1:1）",
+    "Mouse sensitivity": "鼠标灵敏度",
+    "Additional sensitivity": "额外灵敏度",
+    "Direct camera sensitivity": "直接视角灵敏度",
+    "Vertical sensitivity": "垂直灵敏度",
+    "Invert horizontal axis": "反转水平轴",
+    "Invert vertical axis": "反转垂直轴",
+    "Movement and camera": "移动和视角",
+    "Move forward": "向前移动",
+    "Move back": "向后移动",
+    "Move left": "向左移动",
+    "Move right": "向右移动",
+    "Walk (hold)": "步行（按住）",
+    "Dodge / dash (hold); back in menus (Circle)": "闪避 / 冲刺（按住）；菜单中返回（圆圈键）",
+    "Left stick click (L3)": "按下左摇杆（L3）",
+    "Lock on / reset camera (R3)": "锁定目标 / 重置视角（R3）",
+    "Camera up": "视角向上",
+    "Camera down": "视角向下",
+    "Camera left": "视角向左",
+    "Camera right": "视角向右",
+    "Combat": "战斗",
+    "Attack (R1)": "攻击（R1）",
+    "Strong attack (R2)": "强力攻击（R2）",
+    "Transform weapon (L1)": "切换武器形态（L1）",
+    "Firearm (L2)": "使用枪械（L2）",
+    "Items and menus": "道具和菜单",
+    "Interact; confirm in menus (Cross)": "互动；菜单中确认（叉键）",
+    "Use quick item (Square)": "使用快捷道具（方块键）",
+    "Blood vial (Triangle)": "使用血瓶（三角键）",
+    "D-pad up": "方向键上",
+    "Switch quick item (d-pad down)": "切换快捷道具（方向键下）",
+    "Switch left hand weapon (d-pad left)": "切换左手武器（方向键左）",
+    "Switch right hand weapon (d-pad right)": "切换右手武器（方向键右）",
+    "Game menu (Options)": "游戏菜单（Options）",
+    "Gestures (touchpad)": "手势（触摸板）",
+    "Right half of the touchpad (debug menu)": "触摸板右半部分（调试菜单）",
+    "Choose a physical button for each action. Sticks and triggers remain analog.": "为每个动作选择实体按键。摇杆和扳机键仍保持模拟输入。",
+    "Unassigned": "未分配",
+    "Button remapping": "按键重映射",
+    "Click a slot, then press a key, mouse button or scroll the wheel. Shift/Ctrl/Alt combinations are supported.": "点击一个按键槽位，然后按下键盘键、鼠标键或滚动滚轮。支持 Shift/Ctrl/Alt 组合键。",
+    "Click, then press a key, mouse button or scroll the wheel": "点击后按下键盘键、鼠标键或滚动滚轮",
+    "Clear this action's bindings": "清除此动作的按键绑定",
+    "Press an input…": "请按下一个输入…",
+    "Waiting for a key, mouse button or wheel…": "等待键盘、鼠标按键或滚轮输入…",
+    "Unsupported key; press another key": "不支持此按键，请尝试其他按键",
+    "Unsupported mouse button": "不支持此鼠标按键",
+    "This key is reserved by the system menu or a hotkey": "此按键已被系统菜单或快捷键占用",
+    "This combination cannot be assigned to this action": "此组合键不能分配给该动作",
+    "Binding changed; settings are saved when you start the game": "按键绑定已修改，启动游戏时保存",
+    "Could not save controls: {}": "无法保存控制设置：{}",
+    "Stop the game before changing controls": "请先停止游戏，再修改控制设置",
+    "Cancel remapping": "取消重映射",
+    "Shift": "Shift", "Right Shift": "右 Shift", "Ctrl": "Ctrl",
+    "Right Ctrl": "右 Ctrl", "Left Alt": "左 Alt", "Right Alt": "右 Alt",
+    "Win": "Win", "Right Win": "右 Win", "Meta": "Meta", "Right Meta": "右 Meta",
+    "Esc": "Esc", "Backspace": "退格", "Delete": "删除", "Insert": "Insert",
+    "Home": "Home", "End": "End", "Page Up": "Page Up", "Page Down": "Page Down",
+    "Tab": "Tab", "Caps Lock": "Caps Lock", "Enter": "回车", "Space": "空格",
+    "Num .": "小键盘 .", "Num ,": "小键盘 ,", "Num /": "小键盘 /",
+    "Num *": "小键盘 *", "Num -": "小键盘 -", "Num +": "小键盘 +",
+    "Num =": "小键盘 =", "Num Enter": "小键盘回车",
+    "Print Screen": "截图键", "Scroll Lock": "滚动锁定", "Pause": "暂停键",
+    "Left click": "鼠标左键", "Right click": "鼠标右键", "Wheel click": "鼠标中键",
+    "Mouse back": "鼠标侧键（后退）", "Mouse forward": "鼠标侧键（前进）",
+    "Wheel up": "滚轮向上", "Wheel down": "滚轮向下",
+    "Wheel left": "滚轮向左", "Wheel right": "滚轮向右",
+    "Paddle L4": "背键 L4", "Paddle R4": "背键 R4",
+    "Paddle L5": "背键 L5", "Paddle R5": "背键 R5",
+    "D-pad ↑": "方向键 ↑", "D-pad ↓": "方向键 ↓",
+    "D-pad ←": "方向键 ←", "D-pad →": "方向键 →",
+}
+
 EN = {
     # Window, pages, buttons
     "Запустить": "Play",
@@ -330,10 +420,15 @@ def language():
     return _language
 
 
+def translate_control_name(text):
+    """Translate English input/key labels on the Linux Controls page."""
+    return CONTROLS_ZH.get(text, text) if _language == "zh" else text
+
+
 def tr(text):
     if _language == "en":
         return EN.get(text, text)
     if _language == "zh":
         english = EN.get(text)
-        return ZH.get(english, english) if english is not None else text
+        return CONTROLS_ZH.get(english, ZH.get(english, english)) if english is not None else text
     return text
