@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Launcher translations. The Russian text is the key; English is looked up by it.
+"""Launcher translations. Russian text is the source key; English and Simplified Chinese are looked up from it.
 
-ui_language in the launcher settings: "ru", "en" or "" (the system locale: Russian for ru_*,
-English otherwise).
+ui_language in the launcher settings: "ru", "en", "zh" or "" (the system locale).
 """
 import os
+
+from bbport_lang import table as _translation_table
+
+ZH = _translation_table("zh")
 
 EN = {
     # Window, pages, buttons
@@ -39,6 +42,7 @@ EN = {
     # Languages
     "Английский": "English",
     "Русский": "Russian",
+    "简体中文": "Simplified Chinese",
     "Японский": "Japanese",
     "Французский": "French",
     "Испанский": "Spanish",
@@ -304,7 +308,12 @@ def system_language():
     for key in ("LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"):
         value = os.environ.get(key, "")
         if value:
-            return "ru" if value.lower().startswith("ru") else "en"
+            locale = value.lower()
+            if locale.startswith("ru"):
+                return "ru"
+            if locale.startswith("zh"):
+                return "zh"
+            return "en"
     return "en"
 
 
@@ -312,9 +321,9 @@ _language = "ru"
 
 
 def set_language(choice):
-    """choice: "ru", "en" or "" (the system's)."""
+    """choice: "ru", "en", "zh" or "" (the system's)."""
     global _language
-    _language = choice if choice in ("ru", "en") else system_language()
+    _language = choice if choice in ("ru", "en", "zh") else system_language()
 
 
 def language():
@@ -322,4 +331,9 @@ def language():
 
 
 def tr(text):
-    return EN.get(text, text) if _language == "en" else text
+    if _language == "en":
+        return EN.get(text, text)
+    if _language == "zh":
+        english = EN.get(text)
+        return ZH.get(english, english) if english is not None else text
+    return text
