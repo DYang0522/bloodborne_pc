@@ -30,6 +30,18 @@ class LinuxLauncherLanguageTests(unittest.TestCase):
         i18n.set_language("ru")
         self.assertEqual(i18n.tr("Запустить"), "Запустить")
 
+    def test_controls_page_labels_are_simplified_chinese(self):
+        import bbport_input_config as inputs
+        i18n.set_language("zh")
+        for group, actions in inputs.ACTION_GROUPS:
+            self.assertNotEqual(i18n.tr(group[1]), group[1])
+            for _output, labels in actions:
+                self.assertNotEqual(i18n.tr(labels[1]), labels[1])
+                self.assertTrue(i18n.translate_control_name(labels[0]))
+
+        self.assertEqual(i18n.translate_control_name("Left click"), "鼠标左键")
+        self.assertEqual(i18n.translate_control_name("Right Shift"), "右 Shift")
+
 
 if __name__ == "__main__":
     unittest.main()
