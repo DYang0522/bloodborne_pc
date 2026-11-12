@@ -34,10 +34,9 @@ class LinuxLauncherLanguageTests(unittest.TestCase):
         import bbport_input_config as inputs
         i18n.set_language("zh")
         for group, actions in inputs.ACTION_GROUPS:
-            self.assertNotEqual(i18n.tr(group[1]), group[1])
+            self.assertNotEqual(i18n.translate_control_name(group[0]), group[0])
             for _output, labels in actions:
-                self.assertNotEqual(i18n.tr(labels[1]), labels[1])
-                self.assertTrue(i18n.translate_control_name(labels[0]))
+                self.assertNotEqual(i18n.translate_control_name(labels[0]), labels[0])
 
         self.assertEqual(i18n.translate_control_name("Left click"), "鼠标左键")
         self.assertEqual(i18n.translate_control_name("Right Shift"), "右 Shift")
