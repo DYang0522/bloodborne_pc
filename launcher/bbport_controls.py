@@ -25,6 +25,16 @@ def _shown_binding(value, russian):
                       for part in input_config.binding_parts(value))
 
 
+def _localized_pair(pair):
+    """Choose the English/Russian source label, or translate English for Simplified Chinese."""
+    current = language()
+    if current == "en":
+        return pair[0]
+    if current == "zh":
+        return translate_control_name(pair[0])
+    return pair[1]
+
+
 class ControlsMixin:
     """Linux launcher's shared input.ini editor."""
 
@@ -104,9 +114,9 @@ class ControlsMixin:
 
         self.input_slot_buttons = {}
         for group_title, actions in input_config.ACTION_GROUPS:
-            group = Adw.PreferencesGroup(title=tr(group_title[1]))
+            group = Adw.PreferencesGroup(title=_localized_pair(group_title))
             for output, labels in actions:
-                row = Adw.ActionRow(title=tr(labels[1]))
+                row = Adw.ActionRow(title=_localized_pair(labels))
                 values = self.input_bindings.get(output, [])
                 for slot in range(input_config.SLOTS):
                     value = values[slot] if slot < len(values) else None
