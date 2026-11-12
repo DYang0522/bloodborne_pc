@@ -375,7 +375,7 @@ class LauncherWindow(ControlsMixin, Adw.ApplicationWindow):
         page = Adw.PreferencesPage()
 
         launcher = Adw.PreferencesGroup()
-        self.ui_language_row = combo_row(tr("Язык лаунчера") + " / Launcher language", None,
+        self.ui_language_row = combo_row(tr("Язык лаунчера"), None,
                                          UI_LANGUAGES, self.settings.get("ui_language", ""))
         self.ui_language_row.connect("notify::selected", self.on_ui_language)
         launcher.add(self.ui_language_row)
