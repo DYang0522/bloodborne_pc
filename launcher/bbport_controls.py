@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Linux GTK controls page for keyboard, mouse and gamepad mappings."""
 import bbport_input_config as input_config
-from bbport_i18n import language, tr
+from bbport_i18n import language, tr, translate_control_name
 
 import gi
 
@@ -21,7 +21,7 @@ def _combo_row(title, choices, current):
 def _shown_binding(value, russian):
     if not value:
         return "—"
-    return " + ".join(input_config.display_name(part, russian)
+    return " + ".join(translate_control_name(input_config.display_name(part, russian))
                       for part in input_config.binding_parts(value))
 
 
@@ -127,7 +127,7 @@ class ControlsMixin:
 
         controller_choices = [("Не назначено", "")]
         controller_choices.extend(
-            (input_config.controller_display_name(name, russian), name)
+            (translate_control_name(input_config.controller_display_name(name, russian)), name)
             for name in input_config.CONTROLLER_NAMES)
         action_labels = {
             output: labels for _group, actions in input_config.ACTION_GROUPS
