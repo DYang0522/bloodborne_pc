@@ -27,6 +27,7 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <csetjmp>
 #include <cstring>
 #include <cstdlib>
