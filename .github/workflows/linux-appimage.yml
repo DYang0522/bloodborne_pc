@@ -4,6 +4,8 @@
 name: Linux AppImage
 
 on:
+  pull_request:
+    branches: [linux-r9-290x]
   push:
     branches: [linux-r9-290x]
   workflow_dispatch:
