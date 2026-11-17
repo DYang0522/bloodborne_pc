@@ -27,8 +27,10 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <csetjmp>
 #include <cstring>
+#include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -763,6 +765,18 @@ Frame* Presenter::PrepareBlankFrame(bool present_thread) {
 }
 
 void Presenter::Present(Frame* frame, bool is_reusing_frame, bool is_game_frame) {
+#ifndef _WIN32
+    // MAKO cannot query the physical refresh rate from every desktop WSI.
+    // Publish the SDL display rate before the intercepted vkQueuePresentKHR.
+    static u32 published_mako_refresh_hz = 0;
+    const u32 display_refresh_hz = BbDisplayRefreshHz();
+    if (display_refresh_hz != 0 && display_refresh_hz != published_mako_refresh_hz) {
+        char refresh_value[16]{};
+        std::snprintf(refresh_value, sizeof(refresh_value), "%u", display_refresh_hz);
+        ::setenv("MAKO_APPLICATION_REFRESH_HZ", refresh_value, 1);
+        published_mako_refresh_hz = display_refresh_hz;
+    }
+#endif
     present_scheduler.SetExecutionQueue(frame->detached_output
         ? instance.GetPresentQueue() : instance.GetGraphicsQueue());
     // Free the frame for reuse
