@@ -89,8 +89,15 @@ jobs:
           fi
           echo "AppImage launcher stayed open for 20 seconds."
 
+      # GitHub ZIP artifacts normalize file modes to 0644. Keep the AppImage's
+      # executable bit inside a tar archive so it survives download and extraction.
+      - name: Archive executable AppImage
+        run: |
+          tar -C dist -czf dist/Bloodborne-bbport-x86_64.AppImage.tar.gz \
+            Bloodborne-bbport-x86_64.AppImage
+
       - uses: actions/upload-artifact@v4
         with:
-          name: Bloodborne-bbport-x86_64.AppImage
-          path: dist/Bloodborne-bbport-x86_64.AppImage
+          name: Bloodborne-bbport-x86_64.AppImage.tar.gz
+          path: dist/Bloodborne-bbport-x86_64.AppImage.tar.gz
           if-no-files-found: error
